@@ -13,21 +13,21 @@ public interface CompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Master Sync",
-		description = "Master opt-in switch and authentication token",
+		description = "Turn Pssst on, and find the Sync Token your phone needs",
 		position = 0
 	)
 	String syncSection = "syncSection";
 
 	@ConfigSection(
-		name = "Local Server (LAN)",
-		description = "Small local web server the Android app can poll over Wi-Fi, Tailscale or Meshnet",
+		name = "Local Server",
+		description = "Let the Pssst app on your phone read your data straight from this PC, over your Wi-Fi or a VPN such as Tailscale",
 		position = 10
 	)
 	String localWsSection = "localWsSection";
 
 	@ConfigSection(
-		name = "BYOS Server (Remote)",
-		description = "Push state to a self-hosted mock server, Nord Meshnet IP, or Tailscale node",
+		name = "Your Own Server",
+		description = "Send your data to a server you run yourself, such as your own Pssst Worker, so the app can reach it from anywhere",
 		position = 20
 	)
 	String byosSection = "byosSection";
@@ -37,7 +37,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "enableSync",
 		name = "Enable Sync",
-		description = "Master switch to enable companion synchronization. Must be enabled for local or remote sync.",
+		description = "Turns Pssst on. Nothing leaves RuneLite until this is on.",
 		warning = IP_WARNING,
 		position = 1,
 		section = syncSection
@@ -50,7 +50,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "syncToken",
 		name = "Sync Token",
-		description = "Shared authentication token for pairing with your Pssst Android app",
+		description = "The password your phone uses to read your data. Copy it into the Pssst app, and keep it private.",
 		position = 2,
 		section = syncSection
 	)
@@ -63,8 +63,8 @@ public interface CompanionConfig extends Config
 
 	@ConfigItem(
 		keyName = "enableLocalServer",
-		name = "Enable Server",
-		description = "Serves your state at /state on this PC so the app can poll it directly (no cloud). Requires the sync token.",
+		name = "Enable Local Server",
+		description = "Lets the Pssst app read your data from this PC directly, with no cloud in between. Uses the Sync Token.",
 		position = 11,
 		section = localWsSection
 	)
@@ -77,7 +77,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "localServerPort",
 		name = "Port",
-		description = "TCP port used by the local state server",
+		description = "Network port for the local server. Only change it if 8788 is already in use.",
 		position = 12,
 		section = localWsSection
 	)
@@ -88,9 +88,9 @@ public interface CompanionConfig extends Config
 
 	@ConfigItem(
 		keyName = "bindLoopbackOnly",
-		name = "Loopback Only",
-		description = "Bind strictly to 127.0.0.1. Uncheck for LAN, Wi-Fi, or Meshnet connections (exposes the server to your network).",
-		warning = "Turning this off lets other devices on your network reach this PC on the chosen port. They still need your sync token, and the connection is not encrypted. Only do this on a network you trust.",
+		name = "This PC Only",
+		description = "On: only this PC can connect. Turn it off so your phone can connect over your Wi-Fi or a VPN.",
+		warning = "Turning this off lets other devices on your network reach this PC on the chosen port. They still need your Sync Token, and the connection is not encrypted. Only do this on a network you trust.",
 		position = 13,
 		section = localWsSection
 	)
@@ -103,8 +103,8 @@ public interface CompanionConfig extends Config
 
 	@ConfigItem(
 		keyName = "enableByosPush",
-		name = "Enable Push",
-		description = "Periodically push state to the server URL below (a self-hosted server, Tailscale node or your own Worker)",
+		name = "Send to My Server",
+		description = "Sends your data to the Server URL below whenever it changes.",
 		warning = IP_WARNING,
 		position = 21,
 		section = byosSection
@@ -117,7 +117,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "serverUrl",
 		name = "Server URL",
-		description = "Target server address (e.g., http://127.0.0.1:8787, 100.64.0.1:8787, or https://my-server.com)",
+		description = "Address of your own server, for example https://pssst-worker.you.workers.dev or a Tailscale address such as http://100.64.0.1:8787",
 		position = 22,
 		section = byosSection
 	)

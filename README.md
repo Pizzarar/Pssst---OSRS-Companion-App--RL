@@ -10,8 +10,8 @@ Nothing leaves your PC until you turn on **Enable Sync**. Two ways to get the da
 
 | Feature | What it does | Default |
 |---|---|---|
-| Local server | Serves your state at `GET /state` on your PC for the app to poll. Needs your sync token. Listens on `127.0.0.1` unless you untick **Loopback Only** (then other devices on your network can reach it, unencrypted, still needing the token). | on, once sync is enabled; loopback only |
-| Push to a server | Periodically `POST`s the same state to the **Server URL** you enter (your own server, a Tailscale/Meshnet node, or a Cloudflare Worker you deploy). | **off**; shows RuneLite's third-party IP warning |
+| Local Server | Serves your state at `GET /state` on your PC for the app to poll. Needs your Sync Token. Listens on `127.0.0.1` unless you turn off **This PC Only** (then other devices on your network can reach it, unencrypted, still needing the token). | on, once sync is enabled; loopback only |
+| Send to My Server | Periodically `POST`s the same state to the **Server URL** you enter (your own server, a Tailscale or other VPN address, or a Cloudflare Worker you deploy). | **off**; shows RuneLite's third-party IP warning |
 
 ## What is sent
 

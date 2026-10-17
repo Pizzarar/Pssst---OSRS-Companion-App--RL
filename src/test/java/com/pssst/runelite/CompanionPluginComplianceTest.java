@@ -142,10 +142,10 @@ public class CompanionPluginComplianceTest
 	@Test
 	public void testNetworkDispatcherUrlNormalization()
 	{
-		// Bare IP / Meshnet address
-		HttpUrl meshnet = NetworkDispatcher.normalizeServerUrl("100.64.0.1:8787");
-		Assert.assertNotNull(meshnet);
-		Assert.assertEquals("http://100.64.0.1:8787/sync", meshnet.toString());
+		// Bare IP, e.g. a Tailscale or other VPN address
+		HttpUrl vpnAddress = NetworkDispatcher.normalizeServerUrl("100.64.0.1:8787");
+		Assert.assertNotNull(vpnAddress);
+		Assert.assertEquals("http://100.64.0.1:8787/sync", vpnAddress.toString());
 
 		// Trailing slash stripping & /sync appending
 		HttpUrl localWithSlash = NetworkDispatcher.normalizeServerUrl("http://127.0.0.1:8787/");

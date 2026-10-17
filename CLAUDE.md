@@ -31,7 +31,7 @@ Read `GUIDELINES.md` (this repo) before touching networking, prices, assets or g
 - Free. Read-only and observational. No "do X now" instructions and no AI gear advice.
 - Never hotlink or scrape the OSRS Wiki.
 - Any third-party network feature is off by default and carries RuneLite's `ConfigItem.warning` IP disclosure.
-- Local server binds loopback by default (`bindLoopbackOnly = true`; unticking it warns), always requires the token, and the token is never logged. Pushing to a server (`enableByosPush`) is off by default and carries the IP warning.
+- Local server binds loopback by default (`bindLoopbackOnly = true`, shown as "This PC Only"; turning it off warns), always requires the token, and the token is never logged. Pushing to a server (`enableByosPush`, shown as "Send to My Server") is off by default and carries the IP warning.
 
 ## Workflow
 Feature branches named `claude/*`, one commit per logical change. Don't push or merge to `main` without asking.
