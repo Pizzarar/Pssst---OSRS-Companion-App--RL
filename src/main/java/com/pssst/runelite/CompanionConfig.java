@@ -117,12 +117,13 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "serverUrl",
 		name = "Server URL",
-		description = "Address of your own server, for example https://pssst-worker.you.workers.dev or a Tailscale address such as http://100.64.0.1:8787",
+		description = "Address of your own Pssst Worker, for example https://pssst-worker.yourname.workers.dev. Leave empty if you only use the Local Server.",
 		position = 22,
 		section = byosSection
 	)
 	default String serverUrl()
 	{
-		return "http://127.0.0.1:8787";
+		// Empty on purpose: there is no server to assume. (127.0.0.1:8787 was the developer's mock server.)
+		return "";
 	}
 }

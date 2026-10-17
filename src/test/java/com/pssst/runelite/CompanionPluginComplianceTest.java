@@ -136,7 +136,7 @@ public class CompanionPluginComplianceTest
 		Assert.assertEquals("Default local port should be 8788", 8788, config.localServerPort());
 		Assert.assertTrue("bindLoopbackOnly must default to true (LAN exposure is opt-in)", config.bindLoopbackOnly());
 		Assert.assertFalse("Pushing to a configured server must be opt-in (default false)", config.enableByosPush());
-		Assert.assertEquals("http://127.0.0.1:8787", config.serverUrl());
+		Assert.assertEquals("no server is assumed: the Server URL starts empty", "", config.serverUrl());
 	}
 
 	@Test

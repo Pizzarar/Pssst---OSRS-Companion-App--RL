@@ -86,4 +86,18 @@ public class NetworkDispatcherBackoffTest
 		Assert.assertTrue(latch[0].await(5, TimeUnit.SECONDS));
 		Assert.assertEquals(2, requests.get());
 	}
+
+	@Test
+	public void aBlankServerUrlSendsNothing() throws Exception
+	{
+		AtomicInteger requests = new AtomicInteger();
+		CountDownLatch[] latch = {new CountDownLatch(1)};
+		NetworkDispatcher dispatcher = new NetworkDispatcher(answering(200, requests, latch), new Gson(), null, () -> 1L);
+
+		dispatcher.dispatch("", "0123456789abcdef", true, StateDTO.builder().build());
+		dispatcher.dispatch("   ", "0123456789abcdef", true, StateDTO.builder().build());
+
+		Assert.assertFalse(latch[0].await(500, TimeUnit.MILLISECONDS));
+		Assert.assertEquals(0, requests.get());
+	}
 }
