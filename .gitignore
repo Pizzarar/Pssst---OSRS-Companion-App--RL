@@ -13,3 +13,7 @@ build/
 .jdk17/
 local.properties
 out/
+
+# Local tooling (contains machine-specific paths)
+.agents/
+.run/

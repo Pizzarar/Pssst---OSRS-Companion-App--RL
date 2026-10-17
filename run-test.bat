@@ -1,4 +1,4 @@
 @echo off
-set JAVA_HOME=C:\Users\aubro\.gradle\jdks\eclipse_adoptium-17-amd64-windows.2
-set PATH=%JAVA_HOME%\bin;%PATH%
+rem Launches the RuneLite developer client with this plugin loaded.
+rem The JDK comes from org.gradle.java.home in %USERPROFILE%\.gradle\gradle.properties (not committed).
 call gradlew.bat testPlugin
