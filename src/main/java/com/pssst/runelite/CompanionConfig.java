@@ -20,7 +20,7 @@ public interface CompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Local Server (LAN)",
-		description = "Embedded WebSocket server for direct Wi-Fi and Meshnet sync",
+		description = "Small local web server the Android app can poll over Wi-Fi, Tailscale or Meshnet",
 		position = 10
 	)
 	String localWsSection = "localWsSection";
@@ -64,7 +64,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "enableLocalServer",
 		name = "Enable Server",
-		description = "Runs an embedded zero-cloud WebSocket server on this PC for direct Wi-Fi and Meshnet sync",
+		description = "Serves your state at /state on this PC so the app can poll it directly (no cloud). Requires the sync token.",
 		position = 11,
 		section = localWsSection
 	)
@@ -77,7 +77,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "localServerPort",
 		name = "Port",
-		description = "TCP port used by the embedded WebSocket server",
+		description = "TCP port used by the local state server",
 		position = 12,
 		section = localWsSection
 	)
@@ -90,6 +90,7 @@ public interface CompanionConfig extends Config
 		keyName = "bindLoopbackOnly",
 		name = "Loopback Only",
 		description = "Bind strictly to 127.0.0.1. Uncheck for LAN, Wi-Fi, or Meshnet connections (exposes the server to your network).",
+		warning = "Turning this off lets other devices on your network reach this PC on the chosen port. They still need your sync token, and the connection is not encrypted. Only do this on a network you trust.",
 		position = 13,
 		section = localWsSection
 	)
@@ -103,13 +104,14 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "enableByosPush",
 		name = "Enable Push",
-		description = "Periodically push state to a custom remote HTTP server or mock server endpoint",
+		description = "Periodically push state to the server URL below (a self-hosted server, Tailscale node or your own Worker)",
+		warning = IP_WARNING,
 		position = 21,
 		section = byosSection
 	)
 	default boolean enableByosPush()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(

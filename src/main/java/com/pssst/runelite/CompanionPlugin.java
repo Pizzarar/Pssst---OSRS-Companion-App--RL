@@ -5,6 +5,7 @@ import com.google.inject.Provides;
 import com.pssst.runelite.birdhouse.BirdhouseTracker;
 import com.pssst.runelite.farming.FarmingTracker;
 import com.pssst.runelite.slayer.SlayerReader;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -13,7 +14,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -145,7 +145,7 @@ public class CompanionPlugin extends Plugin
 	private NetworkDispatcher networkDispatcher;
 
 	@Inject
-	private LocalWebSocketServer localWebSocketServer;
+	private LocalStateServer localStateServer;
 
 	@Inject
 	private ScheduledExecutorService executor;
@@ -180,9 +180,17 @@ public class CompanionPlugin extends Plugin
 	{
 		if (config != null && (config.syncToken() == null || config.syncToken().trim().isEmpty()))
 		{
-			String token = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-			configManager.setConfiguration("pssstcompanion", "syncToken", token);
-			log.info("Generated sync token: {}", token);
+			// 128 bits from SecureRandom. The token is the only credential protecting the state (and the Worker row), so
+			// it is long, and deliberately never logged.
+			byte[] bytes = new byte[16];
+			new SecureRandom().nextBytes(bytes);
+			StringBuilder token = new StringBuilder();
+			for (byte b : bytes)
+			{
+				token.append(String.format("%02x", b));
+			}
+			configManager.setConfiguration("pssstcompanion", "syncToken", token.toString());
+			log.info("Generated a new sync token (shown in the plugin settings)");
 		}
 
 		ObservationStore observationStore = new ObservationStore()
@@ -221,9 +229,9 @@ public class CompanionPlugin extends Plugin
 		{
 			debounceTask.cancel(false);
 		}
-		if (localWebSocketServer != null)
+		if (localStateServer != null)
 		{
-			localWebSocketServer.stop();
+			localStateServer.stop();
 		}
 		currentInventory = new ArrayList<>();
 		currentBank = new ArrayList<>();
@@ -393,18 +401,18 @@ public class CompanionPlugin extends Plugin
 
 	private void reconcileLocalServer()
 	{
-		if (localWebSocketServer == null)
+		if (localStateServer == null)
 		{
 			return;
 		}
 
 		if (config != null && config.enableSync() && config.enableLocalServer())
 		{
-			localWebSocketServer.start(config.localServerPort(), config.bindLoopbackOnly(), config.syncToken());
+			localStateServer.start(config.localServerPort(), config.bindLoopbackOnly(), config.syncToken());
 		}
 		else
 		{
-			localWebSocketServer.stop();
+			localStateServer.stop();
 		}
 	}
 
@@ -446,14 +454,14 @@ public class CompanionPlugin extends Plugin
 				state.getGeOffers() != null ? state.getGeOffers().size() : 0,
 				state.getVarbits() != null ? state.getVarbits().size() : 0);
 
-			// 1. Broadcast over local WebSocket server wrapped in state envelope
-			if (config.enableLocalServer() && localWebSocketServer != null && localWebSocketServer.isRunning())
+			// 1. Publish to the local server, wrapped in the same envelope the Worker returns
+			if (config.enableLocalServer() && localStateServer != null && localStateServer.isRunning())
 			{
 				Map<String, Object> envelope = new HashMap<>();
 				envelope.put("data", state);
 				envelope.put("updated_at", System.currentTimeMillis());
 				String envelopeJson = gson.toJson(envelope);
-				localWebSocketServer.broadcast(envelopeJson);
+				localStateServer.publish(envelopeJson);
 			}
 
 			// 2. Dispatch to BYOS outbound server if enabled

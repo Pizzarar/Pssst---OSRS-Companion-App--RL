@@ -111,6 +111,13 @@ public class CompanionPluginComplianceTest
 		Assert.assertTrue("ConfigItem warning must mention IP address submission",
 			configItemAnno.warning().toLowerCase().contains("ip address"));
 
+		// The push item is where data actually leaves the machine, so it carries the disclosure too
+		ConfigItem pushItem = CompanionConfig.class.getMethod("enableByosPush").getAnnotation(ConfigItem.class);
+		Assert.assertTrue("enableByosPush must warn about IP address submission",
+			pushItem.warning().toLowerCase().contains("ip address"));
+		ConfigItem loopbackItem = CompanionConfig.class.getMethod("bindLoopbackOnly").getAnnotation(ConfigItem.class);
+		Assert.assertFalse("bindLoopbackOnly must warn before exposing the server", loopbackItem.warning().isEmpty());
+
 		// 2. Default values verification via default methods
 		CompanionConfig config = (CompanionConfig) Proxy.newProxyInstance(
 			CompanionConfig.class.getClassLoader(),
@@ -125,10 +132,10 @@ public class CompanionPluginComplianceTest
 		);
 
 		Assert.assertFalse("Master sync must be opt-in (default false)", config.enableSync());
-		Assert.assertTrue("Local WebSocket server should default to true", config.enableLocalServer());
+		Assert.assertTrue("Local state server may default to on: it only runs once sync is enabled, and needs the token", config.enableLocalServer());
 		Assert.assertEquals("Default local port should be 8788", 8788, config.localServerPort());
 		Assert.assertTrue("bindLoopbackOnly must default to true (LAN exposure is opt-in)", config.bindLoopbackOnly());
-		Assert.assertTrue("BYOS push should default to true", config.enableByosPush());
+		Assert.assertFalse("Pushing to a configured server must be opt-in (default false)", config.enableByosPush());
 		Assert.assertEquals("http://127.0.0.1:8787", config.serverUrl());
 	}
 
@@ -158,88 +165,6 @@ public class CompanionPluginComplianceTest
 		// Blank / null
 		Assert.assertNull(NetworkDispatcher.normalizeServerUrl(""));
 		Assert.assertNull(NetworkDispatcher.normalizeServerUrl(null));
-	}
-
-	@Test
-	public void testLocalWebSocketServerHttpFallbackAndAuth() throws Exception
-	{
-		int testPort;
-		try (ServerSocket ss = new ServerSocket(0))
-		{
-			testPort = ss.getLocalPort();
-		}
-
-		LocalWebSocketServer server = new LocalWebSocketServer();
-		String syncToken = "test-token-uuid-1234";
-
-		try
-		{
-			server.start(testPort, true, syncToken);
-			Assert.assertTrue(server.isRunning());
-
-			// 1. Unauthorized request without token -> 401
-			HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:" + testPort + "/state").openConnection();
-			conn.setConnectTimeout(2000);
-			conn.setReadTimeout(2000);
-			Assert.assertEquals(401, conn.getResponseCode());
-
-			// 2. Authorized request with Bearer header before any state broadcast -> 404
-			HttpURLConnection authConn = (HttpURLConnection) new URL("http://127.0.0.1:" + testPort + "/state").openConnection();
-			authConn.setRequestProperty("Authorization", "Bearer " + syncToken);
-			authConn.setConnectTimeout(2000);
-			authConn.setReadTimeout(2000);
-			Assert.assertEquals(404, authConn.getResponseCode());
-
-			// 3. Broadcast state and verify 200 OK
-			String sampleStateJson = "{\"data\":{\"inventory\":[{\"id\":4151,\"quantity\":1}]},\"updated_at\":1000}";
-			server.broadcast(sampleStateJson);
-
-			HttpURLConnection stateConn = (HttpURLConnection) new URL("http://127.0.0.1:" + testPort + "/state?token=" + syncToken).openConnection();
-			stateConn.setConnectTimeout(2000);
-			stateConn.setReadTimeout(2000);
-			Assert.assertEquals(200, stateConn.getResponseCode());
-
-			try (BufferedReader reader = new BufferedReader(new InputStreamReader(stateConn.getInputStream(), StandardCharsets.UTF_8)))
-			{
-				String body = reader.readLine();
-				Assert.assertEquals(sampleStateJson, body);
-			}
-
-			// 4. Test POST /sync endpoint
-			HttpURLConnection syncConn = (HttpURLConnection) new URL("http://127.0.0.1:" + testPort + "/sync?token=" + syncToken).openConnection();
-			syncConn.setRequestMethod("POST");
-			syncConn.setConnectTimeout(2000);
-			syncConn.setReadTimeout(2000);
-			Assert.assertEquals(200, syncConn.getResponseCode());
-		}
-		finally
-		{
-			server.stop();
-			Assert.assertFalse(server.isRunning());
-		}
-	}
-
-	@Test
-	public void testWebSocketTextFrameEncoding()
-	{
-		// Short payload (< 126 bytes)
-		String shortMsg = "{\"test\":1}";
-		byte[] shortFrame = LocalWebSocketServer.encodeTextFrame(shortMsg);
-		Assert.assertEquals((byte) 0x81, shortFrame[0]);
-		Assert.assertEquals((byte) shortMsg.length(), shortFrame[1]);
-
-		// Medium payload (>= 126 bytes)
-		StringBuilder mediumBuilder = new StringBuilder();
-		for (int i = 0; i < 200; i++)
-		{
-			mediumBuilder.append("A");
-		}
-		String mediumMsg = mediumBuilder.toString();
-		byte[] mediumFrame = LocalWebSocketServer.encodeTextFrame(mediumMsg);
-		Assert.assertEquals((byte) 0x81, mediumFrame[0]);
-		Assert.assertEquals((byte) 126, mediumFrame[1]);
-		int len = ((mediumFrame[2] & 0xFF) << 8) | (mediumFrame[3] & 0xFF);
-		Assert.assertEquals(200, len);
 	}
 
 	private static class MethodHandlesLookupHelper
