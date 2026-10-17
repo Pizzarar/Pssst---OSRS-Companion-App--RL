@@ -2,6 +2,7 @@ package com.pssst.runelite;
 
 import com.google.gson.Gson;
 import java.io.IOException;
+import java.util.function.LongSupplier;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -20,16 +21,29 @@ public class NetworkDispatcher
 {
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
+	private static final long DEFAULT_BACKOFF_SECONDS = 60;
+	private static final long MAX_BACKOFF_SECONDS = 3600;
+
 	private final OkHttpClient okHttpClient;
 	private final Gson gson;
 	private final CompanionConfig config;
+	private final LongSupplier clockMs;
+
+	/** Pushes are skipped until this time after the server answered 429 or 403. */
+	private volatile long pausedUntilMs;
 
 	@Inject
 	public NetworkDispatcher(OkHttpClient okHttpClient, Gson gson, CompanionConfig config)
 	{
+		this(okHttpClient, gson, config, System::currentTimeMillis);
+	}
+
+	NetworkDispatcher(OkHttpClient okHttpClient, Gson gson, CompanionConfig config, LongSupplier clockMs)
+	{
 		this.okHttpClient = okHttpClient;
 		this.gson = gson;
 		this.config = config;
+		this.clockMs = clockMs;
 	}
 
 	public NetworkDispatcher(OkHttpClient okHttpClient, Gson gson)
@@ -58,6 +72,12 @@ public class NetworkDispatcher
 		if (!enableSync)
 		{
 			log.debug("Dispatch skipped: sync disabled");
+			return;
+		}
+
+		if (clockMs.getAsLong() < pausedUntilMs)
+		{
+			log.debug("Dispatch skipped: the server asked us to back off");
 			return;
 		}
 
@@ -115,7 +135,14 @@ public class NetworkDispatcher
 			{
 				try
 				{
-					if (!response.isSuccessful())
+					if (response.code() == 429 || response.code() == 403)
+					{
+						// Told to stop: no retrying around it. The next push after the pause is the only retry.
+						long pauseMs = backoffMillis(response.header("Retry-After"));
+						pausedUntilMs = clockMs.getAsLong() + pauseMs;
+						log.warn("POST {} -> HTTP {}; pausing pushes for {} s", finalUrl, response.code(), pauseMs / 1000);
+					}
+					else if (!response.isSuccessful())
 					{
 						log.warn("POST {} -> HTTP {}", finalUrl, response.code());
 					}
@@ -130,6 +157,24 @@ public class NetworkDispatcher
 				}
 			}
 		});
+	}
+
+	/** Retry-After in seconds (default 60 s, at most an hour); the HTTP-date form is treated as unparsable. */
+	static long backoffMillis(String retryAfter)
+	{
+		long seconds = DEFAULT_BACKOFF_SECONDS;
+		if (retryAfter != null)
+		{
+			try
+			{
+				seconds = Long.parseLong(retryAfter.trim());
+			}
+			catch (NumberFormatException ignored)
+			{
+				// keep the default
+			}
+		}
+		return Math.max(1, Math.min(seconds, MAX_BACKOFF_SECONDS)) * 1000;
 	}
 
 	/**
