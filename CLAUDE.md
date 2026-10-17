@@ -1,11 +1,10 @@
-# Pssst — RuneLite plugin + Cloudflare Worker
+# Pssst — RuneLite plugin
 
-Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` (see its `CLAUDE.md`).
+Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` and the optional cloud relay at `L:\Dev\Plugins\PssstWorker` (see their `CLAUDE.md` files). This repo is the Plugin Hub submission, so it holds only the plugin.
 
 ## Layout
-- `src/main/java/com/pssst/runelite/` — plugin (Java 11 target). `CompanionPlugin` collects state, `NetworkDispatcher` POSTs `/sync`, `LocalWebSocketServer` serves `GET /state` + WS on port 8788, `StateDTO` is the payload.
-- `src/test/java/com/pssst/runelite/` — `CompanionPluginComplianceTest` (Hub rules: config defaults/warning, integer-only DTO, URL normalization, local server auth) and `PssstPluginTest` (dev-client launcher).
-- `src/index.ts`, `schema.sql`, `wrangler.toml` — Cloudflare Worker + D1. Lives here for now; must move out before Hub submission.
+- `src/main/java/com/pssst/runelite/` — plugin (Java 11 target). `CompanionPlugin` collects state, `NetworkDispatcher` POSTs `/sync`, `LocalStateServer` serves `GET /state` on port 8788 (Authorization header only, no CORS/WebSocket, refuses to start without a token, loopback by default), `StateDTO` is the payload.
+- `src/test/java/com/pssst/runelite/` — `CompanionPluginComplianceTest` (Hub rules: config defaults/warning, integer-only DTO, URL normalization, push/loopback defaults and warnings); `LocalStateServerTest` covers the auth and limits of the local server and `PssstPluginTest` (dev-client launcher).
 
 ## Commands (verified 2026-10-17)
 | What | Command | Notes |
@@ -13,17 +12,13 @@ Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` (see its `CLAUDE.md
 | Build + tests | `.\gradlew.bat build` | ~25s, 37 tests (compliance, tracked-id pin, farming/birdhouse parity and trackers, slayer reader). Builds with `-Xlint:deprecation` and has no deprecation warnings (gameval only) |
 | Regenerate farming tables | `.\gradlew.bat generateFarmingData` | Rewrites `farming/FarmingData.java` from RuneLite's timetracking classes. Run when `FarmingParityTest` fails after a RuneLite update, then re-check `FarmingBounds` by hand |
 | Run dev client | `.\run-test.bat` | **User runs this in their own terminal.** Never launch the RuneLite GUI from an agent |
-| Worker typecheck | `npx tsc --noEmit` | |
-| Worker local | `npx wrangler dev` | Serves on :8787. Unauthenticated `GET /state` → 401 is expected. First run: `npx wrangler d1 execute augur-db --local --file=schema.sql` |
-
-`npm install` warns that npm 11 blocked install scripts (esbuild, workerd, sharp). `wrangler dev` works anyway; run `npm approve-scripts` only if it breaks.
 
 ## Environment
-- JDK: Temurin 17.0.20.1 at `C:/Users/aubro/.gradle/jdks/eclipse_adoptium-17-amd64-windows.2`. It's pinned in `gradle.properties` via `org.gradle.java.home`, which is machine-specific and must be removed before submission.
+- JDK: Temurin 17.0.20.1 at `C:/Users/aubro/.gradle/jdks/eclipse_adoptium-17-amd64-windows.2`, set once in the user-level `~/.gradle/gradle.properties` (`org.gradle.java.home=...`). It is deliberately **not** in either repo's `gradle.properties`: it is machine-specific, and the Plugin Hub builds with its own JDK. A fresh clone needs that line (or `JAVA_HOME` pointing at a JDK 17).
 - `compileOnly 'net.runelite:client:+'` (always latest).
 
 ## Cross-repo contract
-Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbits{}, varps{}, slayer{}, farming[], birdhouses[] }`, with items as `{id, quantity}`. The Worker, the mock server (`PssstAndroid/pssst-mock-server`) and the plugin's local server wrap it as `{ data, updated_at }`. `updated_at` is seconds from the Worker and ms from WS/mock; Android normalizes to ms.
+Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbits{}, varps{}, slayer{}, farming[], birdhouses[] }`, with items as `{id, quantity}`. The Worker (`PssstWorker`), the mock server (`PssstAndroid/pssst-mock-server`) and the plugin's local server wrap it as `{ data, updated_at }`. `updated_at` is seconds from the Worker and ms from the local server and mock; Android normalizes to ms. Auth everywhere is `Authorization: Bearer <sync token>` (never a query parameter). The Worker accepts tokens of 16-128 chars of `A-Za-z0-9_-` and caps bodies at 256 KB.
 `farming[]` entries are `{regionId, regionName, patchName, patchType, varbitId, value, observedAt, cropName, itemId, cropState, stage, stages, tickMinutes}`. `regionId + varbitId` identify a patch (the varbit alone is a per-region slot). `observedAt` is epoch **ms** and only moves when `value` changes. Crop fields are absent for unknown values. `tickMinutes` is 0 when nothing is advancing. ETA (Android side): `floor(observedAt / tick) * tick + (stages - 1 - stage) * tick`, with `tick = tickMinutes` in ms.
 Change one side → update `StateDTO.java` **and** `StateDto.kt` together, plus both servers if the envelope changes.
 
@@ -32,7 +27,7 @@ Change one side → update `StateDTO.java` **and** `StateDto.kt` together, plus 
 - Free. Read-only and observational. No "do X now" instructions and no AI gear advice.
 - Never hotlink or scrape the OSRS Wiki.
 - Any third-party network feature is off by default and carries RuneLite's `ConfigItem.warning` IP disclosure.
-- Local server binds loopback by default (`bindLoopbackOnly = true`).
+- Local server binds loopback by default (`bindLoopbackOnly = true`; unticking it warns), always requires the token, and the token is never logged. Pushing to a server (`enableByosPush`) is off by default and carries the IP warning.
 
 ## Workflow
 Feature branches named `claude/*`, one commit per logical change. Don't push or merge to `main` without asking.
