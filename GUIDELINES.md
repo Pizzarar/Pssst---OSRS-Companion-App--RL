@@ -26,12 +26,12 @@ Mystix was a companion plugin removed from the RuneLite Plugin Hub. The details 
 ## Self-hosted / bring-your-own-server is the model
 
 - The data path is plugin → **your** server (its local server, your mock server, or a Worker *you* deploy) → your phone. There is no central Pssst service, and the app must not default to one.
-- The Worker is meant to be deployed per user. Publicly reachable, it must accept only its owner's token, not create a row for any token that shows up.
+- The Worker is meant to be deployed per user and is owner-only: it accepts just the tokens whose hashes are in `ALLOWED_TOKEN_HASHES`.
 
 ## Prices
 
 - **Preferred:** the plugin attaches prices from RuneLite's injected `ItemManager` (`getItemPrice`) to the items it already sends. That adds zero extra external traffic and no Wiki dependency.
-- **If the app fetches prices itself:** only the Wiki real-time prices **bulk** endpoints (`/latest`; `/mapping` at build time). Never per-item loops. Honest User-Agent, cached in Room, at most about hourly, never on screen open, opt-in.
+- **The app does not fetch prices.** (If that ever changes: only the Wiki real-time prices **bulk** endpoints, `/latest`, never per-item loops; honest User-Agent; cached in Room; at most about hourly; never on screen open; opt-in with an IP disclosure.)
 - No price history, no flipping, no "worth buying" or profit suggestions.
 - The bundled manifest's prices are a fallback snapshot, regenerated only by `pssst-mock-server/scripts/build-item-manifest.js` (3 requests, real contact required).
 
@@ -58,30 +58,24 @@ Mystix was a companion plugin removed from the RuneLite Plugin Hub. The details 
 
 ## Status (2026-10-17)
 
-Compliant:
-- Icons bundled, no runtime image loads.
-- Injected HTTP client with `enqueue`.
-- Gameval-only ids; deprecation lint is on.
-- Sync and push off by default with warnings; token not logged.
-- Local server: header-only token, no CORS, loopback by default.
-- Worker split out, with hashed tokens, a size cap and a throttle.
-- Farming, birdhouses and slayer ported from RuneLite with parity tests.
+Compliant, each with a test that fails if it regresses:
+- **No third-party requests at runtime.** Prices come from RuneLite's `ItemManager` inside the plugin payload (`PriceBookTest`); the app calls only the server the user configured (`GuardrailsTest` fails on any Wiki, RuneLite-static or built-in host in shipped code). There is no default server and no central service (`SyncWorkerTest`: no URL, no request).
+- Icons are bundled; nothing loads images at runtime.
+- Injected HTTP client with `enqueue`; gameval-only ids with deprecation lint on (`TrackedVarIdsTest` pins the ids the app reads).
+- Sync and push are off by default with warnings; the token is never logged, not even a prefix (`SyncWorkerTest`).
+- Local server: header-only token, no CORS, loopback by default, refuses to start without a token (`LocalStateServerTest`).
+- Worker: separate repo, owner-only (`ALLOWED_TOKEN_HASHES`, fails closed), hashed tokens, size cap, per-token throttle.
+- **Backing off:** a 403/429 ends the attempt in the app and pauses pushes in the plugin for `Retry-After`; there is no retry loop around a block. Network drops are ridden out (retry with backoff, the schedule continues, "unreachable" only after 3 failures in a row). Disconnect cancels all background work.
+- **Observational only:** dailies show eligibility and claimed state, with no profit, no what-to-buy and no where-to-go (`DailyTasksTest.noRewardAmountsOrAdviceAppearAnywhere`). The GE screen shows the player's own offers.
+- **Sourced, not guessed:** farming, birdhouses and slayer are ported from RuneLite with parity tests; dailies from `DailyTasksPlugin` (`DailyTasksParityTest` pins its constants and ids); Miscellania from `KingdomPlugin` (approval out of 127, raw coffer); quest states come from the client; potion storage uses RuneLite's named constants (`PotionStorageConstantsTest`).
 - No foreground service, default notification sound, nothing paid.
-- GE offers screen: shows your own offers only, with no suggestions.
 
-Deviations to fix:
-
-| Where | Deviation | Fix |
-|---|---|---|
-| App prices | Fetches the Wiki itself (opt-in, 12 h, bulk, honest User-Agent). This is allowed, but it's the fallback path, not the preferred one. | Plugin sends `ItemManager` prices with the items it already sends; the app stops calling the Wiki, and the Setup price question goes away. |
-| App, `PriceRefreshWorker` | Retries on 429. | Treat 429 like 403: stop until the next scheduled run. |
-| App, Disconnect | Doesn't cancel the periodic sync or the price refresh, so the price refresh keeps calling the Wiki with nobody paired. | Cancel all Pssst work on disconnect. |
-| App, `StateApiService.DEFAULT_BASE_URL` | Defaults to `pssst.rosserlogic.tech`, a central server that doesn't exist and contradicts self-hosting. | No default; the server URL comes from pairing only. |
-| App, `SyncWorker` | Logs the first 4 characters of the token. | Don't log any part of it. |
-| App, dailies | "Estimated profit" for Zaff staves and "Can buy N" for NMZ herb boxes read as buy/sell advice. | Show availability only. |
-| Worker | Any well-formed token creates a row. | Owner-only: `ALLOWED_TOKEN_HASHES` secret; reject other tokens, and fail closed when it's unset. |
-| App, unverified logic | Dailies, Miscellania (`/127`), NMZ costs, `FarmingPaymentCatalog` are inherited and unsourced. | Source each one, or show raw values. |
+Shown raw or marked unverified (not guessed):
+- **Tears of Guthix:** RuneLite has no rule for the two varbits, so the app shows "Countdown: N, Quest points check: N" and never calls it available.
+- **Farming payments** (`FarmingPaymentCatalog`): hand-written, unchecked; the Payments tab says so. Before removing the notice, verify each row and record its source in the file.
 
 Known risks (decide before submission):
-- `LocalStateServer` runs one daemon thread to accept connections, because a listening socket can't share the client's executor. Reviewers may reject any listening socket. The fallback is to drop the local server and rely on push to a self-hosted server.
-- The build script fetches RuneLite's `static.runelite.net` names and the Wiki mapping at build time only (3 requests, honest User-Agent).
+- `LocalStateServer` runs one daemon thread to accept connections, because a listening socket cannot share the client's executor. Reviewers may reject any listening socket. The fallback is to drop the local server and rely on push to a self-hosted server.
+- The Worker deploys per user with their own token hash; there is deliberately no public instance. A public one would need real accounts, which breaks the "no sign-ups" rule.
+- The build script fetches RuneLite's `static.runelite.net` names and the Wiki mapping and latest prices at build time only (3 requests, honest User-Agent via the required `PSSST_CONTACT`).
+- The app's bundled price snapshot is a fallback only; it is as old as the last `npm run manifest`.
