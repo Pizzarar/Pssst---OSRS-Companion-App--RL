@@ -1,0 +1,40 @@
+plugins {
+    id 'java'
+}
+group = 'com.pssst'
+version = '1.0-SNAPSHOT'
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url = 'https://repo.runelite.net' }
+}
+dependencies {
+    compileOnly 'net.runelite:client:+'
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+    testImplementation 'net.runelite:client:+'
+    testImplementation 'junit:junit:4.13.2'
+    testCompileOnly 'org.projectlombok:lombok:1.18.30'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+}
+tasks.withType(JavaCompile) {
+    options.release = 11
+}
+
+tasks.register('testPlugin', JavaExec) {
+    group = 'Execution'
+    description = 'Runs RuneLite with CompanionPlugin'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.pssst.runelite.PssstPluginTest'
+    jvmArgs = [
+        '-ea',
+        '-Dawt.useSystemAAFontSettings=on',
+        '-Dswing.aatext=true',
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.util=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+        '--add-opens=java.desktop/sun.awt=ALL-UNNAMED'
+    ]
+    args = ['--developer-mode', '--debug']
+}

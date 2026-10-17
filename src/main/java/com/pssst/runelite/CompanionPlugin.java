@@ -1,0 +1,706 @@
+package com.pssst.runelite;
+
+import com.google.gson.Gson;
+import com.google.inject.Provides;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import javax.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Client;
+import net.runelite.api.EnumComposition;
+import net.runelite.api.GameState;
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.InventoryID;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
+import net.runelite.api.Quest;
+import net.runelite.api.Skill;
+import net.runelite.api.VarPlayer;
+import net.runelite.api.Varbits;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.api.events.GrandExchangeOfferChanged;
+import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.events.WidgetClosed;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetID;
+import net.runelite.client.callback.ClientThread;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
+
+@Slf4j
+@PluginDescriptor(
+	name = "Pssst Companion",
+	description = "Syncs player state to the Pssst Android app",
+	tags = {"pssst", "companion", "sync"},
+	hidden = false
+)
+public class CompanionPlugin extends Plugin
+{
+	private static final int DEBOUNCE_DELAY_SECONDS = 2;
+	private static final int HEARTBEAT_TICKS = 1500; // 15 minutes = 1500 ticks @ 600ms/tick
+
+	// Potion Storage Script & Widget IDs
+	private static final int SCRIPT_POTIONSTORE_BUILD = 6080;
+	private static final int SCRIPT_POTIONSTORE_UPDATE = 6555;
+	private static final int WIDGET_POTIONSTORE_ITEMS = 786490; // (12 << 16) | 58
+	private static final int ENUM_POTIONSTORE_POTIONS = 4826;
+	private static final int ENUM_POTIONSTORE_UNFINISHED = 4829;
+
+	private static final Set<Integer> TRACKED_VARBITS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+		// Miscellania
+		Varbits.KINGDOM_APPROVAL,
+		Varbits.KINGDOM_COFFER,
+
+		// Daily resets & weekly activities
+		Varbits.DAILY_STAVES_COLLECTED,
+		Varbits.DAILY_HERB_BOXES_COLLECTED,
+		Varbits.DAILY_ESSENCE_COLLECTED,
+		Varbits.DAILY_RUNES_COLLECTED,
+		Varbits.DAILY_SAND_COLLECTED,
+		Varbits.DAILY_FLAX_STATE,
+		Varbits.DAILY_ARROWS_STATE,
+		Varbits.DAILY_BONEMEAL_STATE,
+		Varbits.DAILY_DYNAMITE_COLLECTED,
+		net.runelite.api.gameval.VarbitID.TOG_COUNTDOWN,
+		net.runelite.api.gameval.VarbitID.TOG_QP_BEFORE_RETURN,
+
+		// Achievement Diaries (unlock tier counts for daily rewards)
+		Varbits.DIARY_VARROCK_EASY,
+		Varbits.DIARY_VARROCK_MEDIUM,
+		Varbits.DIARY_VARROCK_HARD,
+		Varbits.DIARY_VARROCK_ELITE,
+		Varbits.DIARY_MORYTANIA_EASY,
+		Varbits.DIARY_MORYTANIA_MEDIUM,
+		Varbits.DIARY_MORYTANIA_HARD,
+		Varbits.DIARY_MORYTANIA_ELITE,
+		Varbits.DIARY_ARDOUGNE_EASY,
+		Varbits.DIARY_ARDOUGNE_MEDIUM,
+		Varbits.DIARY_ARDOUGNE_HARD,
+		Varbits.DIARY_ARDOUGNE_ELITE,
+		Varbits.DIARY_KANDARIN_EASY,
+		Varbits.DIARY_KANDARIN_MEDIUM,
+		Varbits.DIARY_KANDARIN_HARD,
+		Varbits.DIARY_KANDARIN_ELITE,
+		Varbits.DIARY_WESTERN_EASY,
+		Varbits.DIARY_WESTERN_MEDIUM,
+		Varbits.DIARY_WESTERN_HARD,
+		Varbits.DIARY_WESTERN_ELITE,
+		Varbits.DIARY_WILDERNESS_EASY,
+		Varbits.DIARY_WILDERNESS_MEDIUM,
+		Varbits.DIARY_WILDERNESS_HARD,
+		Varbits.DIARY_WILDERNESS_ELITE,
+		Varbits.DIARY_KOUREND_EASY,
+		Varbits.DIARY_KOUREND_MEDIUM,
+		Varbits.DIARY_KOUREND_HARD,
+		Varbits.DIARY_KOUREND_ELITE,
+
+		// Farming patch states
+		Varbits.FARMING_4771,
+		Varbits.FARMING_4772,
+		Varbits.FARMING_4773,
+		Varbits.FARMING_4774,
+		Varbits.FARMING_4775,
+		Varbits.FARMING_7904,
+		Varbits.FARMING_7905,
+		Varbits.FARMING_7906,
+		Varbits.FARMING_7907,
+		Varbits.FARMING_7908,
+		Varbits.FARMING_7909,
+		Varbits.FARMING_7910,
+		Varbits.FARMING_7911,
+		Varbits.FARMING_7912,
+		Varbits.AUTOWEED,
+
+		// Grapes
+		Varbits.GRAPES_4953,
+		Varbits.GRAPES_4954,
+		Varbits.GRAPES_4955,
+		Varbits.GRAPES_4956,
+		Varbits.GRAPES_4957,
+		Varbits.GRAPES_4958,
+		Varbits.GRAPES_4959,
+		Varbits.GRAPES_4960,
+		Varbits.GRAPES_4961,
+		Varbits.GRAPES_4962,
+		Varbits.GRAPES_4963,
+		Varbits.GRAPES_4964
+	)));
+
+	private static final Set<Integer> TRACKED_VARPS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+		VarPlayer.BIRD_HOUSE_MEADOW_NORTH,
+		VarPlayer.BIRD_HOUSE_MEADOW_SOUTH,
+		VarPlayer.BIRD_HOUSE_VALLEY_NORTH,
+		VarPlayer.BIRD_HOUSE_VALLEY_SOUTH,
+		VarPlayer.NMZ_REWARD_POINTS,
+		VarPlayer.SLAYER_TASK_SIZE
+	)));
+
+	@Inject
+	private Client client;
+
+	@Inject
+	private ClientThread clientThread;
+
+	@Inject
+	private ConfigManager configManager;
+
+	@Inject
+	private CompanionConfig config;
+
+	@Inject
+	private Gson gson;
+
+	@Inject
+	private NetworkDispatcher networkDispatcher;
+
+	@Inject
+	private LocalWebSocketServer localWebSocketServer;
+
+	@Inject
+	private ScheduledExecutorService executor;
+
+	// volatile: written on the client thread, read by syncState() on the executor thread.
+	// Lists are replaced wholesale, never mutated in place, so a volatile reference is sufficient.
+	private volatile List<StateDTO.ItemEntry> currentInventory = new ArrayList<>();
+	private volatile List<StateDTO.ItemEntry> currentBank = new ArrayList<>();
+	private volatile List<StateDTO.ItemEntry> currentPotionStorage = new ArrayList<>();
+	private volatile List<StateDTO.SkillEntry> currentSkills = new ArrayList<>();
+	private volatile List<StateDTO.GeOfferEntry> currentGeOffers = new ArrayList<>();
+	private final Map<Integer, Integer> currentVarbits = new ConcurrentHashMap<>();
+
+	private ScheduledFuture<?> debounceTask;
+	private int tickCounter = 0;
+
+	@Provides
+	CompanionConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(CompanionConfig.class);
+	}
+
+	@Override
+	protected void startUp() throws Exception
+	{
+		if (config != null && (config.syncToken() == null || config.syncToken().trim().isEmpty()))
+		{
+			String token = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+			configManager.setConfiguration("pssstcompanion", "syncToken", token);
+			log.info("Generated sync token: {}", token);
+		}
+
+		reconcileLocalServer();
+
+		log.info("Pssst Companion plugin started!");
+		clientThread.invokeLater(this::refreshAllClientState);
+	}
+
+	@Override
+	protected void shutDown() throws Exception
+	{
+		if (debounceTask != null && !debounceTask.isDone())
+		{
+			debounceTask.cancel(false);
+		}
+		if (localWebSocketServer != null)
+		{
+			localWebSocketServer.stop();
+		}
+		currentInventory = new ArrayList<>();
+		currentBank = new ArrayList<>();
+		currentPotionStorage = new ArrayList<>();
+		currentSkills = new ArrayList<>();
+		currentGeOffers = new ArrayList<>();
+		currentVarbits.clear();
+		tickCounter = 0;
+		log.info("Companion plugin stopped");
+	}
+
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		if (event.getGameState() == GameState.LOGGED_IN)
+		{
+			tickCounter = 0;
+			clientThread.invokeLater(this::refreshAllClientState);
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick event)
+	{
+		tickCounter++;
+		if (tickCounter >= HEARTBEAT_TICKS)
+		{
+			tickCounter = 0;
+			syncState();
+		}
+	}
+
+	@Subscribe
+	public void onWidgetClosed(WidgetClosed event)
+	{
+		int groupId = event.getGroupId();
+		if (isBankOrInterface(groupId))
+		{
+			triggerDebouncedSync();
+		}
+	}
+
+	@Subscribe
+	public void onItemContainerChanged(ItemContainerChanged event)
+	{
+		int containerId = event.getContainerId();
+		if (containerId == 93 || containerId == InventoryID.INVENTORY.getId())
+		{
+			updateInventory(event.getItemContainer());
+			publishState();
+		}
+		else if (containerId == 95 || containerId == InventoryID.BANK.getId())
+		{
+			updateBank(event.getItemContainer());
+			publishState();
+		}
+	}
+
+	@Subscribe
+	public void onStatChanged(StatChanged event)
+	{
+		refreshAllSkills();
+		publishState();
+	}
+
+	@Subscribe
+	public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event)
+	{
+		refreshAllGeOffers();
+		publishState();
+	}
+
+	@Subscribe
+	public void onScriptPostFired(ScriptPostFired event)
+	{
+		int scriptId = event.getScriptId();
+		if (scriptId == SCRIPT_POTIONSTORE_BUILD || scriptId == SCRIPT_POTIONSTORE_UPDATE)
+		{
+			updatePotionStorage();
+			publishState();
+		}
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged event)
+	{
+		int varbitId = event.getVarbitId();
+		int varpId = event.getVarpId();
+		if (varbitId != -1)
+		{
+			if (TRACKED_VARBITS.contains(varbitId))
+			{
+				currentVarbits.put(varbitId, event.getValue());
+				publishState();
+			}
+		}
+		else if (varpId != -1 && TRACKED_VARPS.contains(varpId))
+		{
+			// NOTE: varps share the varbits map; IDs are disjoint today but this is a latent collision
+			currentVarbits.put(varpId, event.getValue());
+			publishState();
+		}
+		// No else-branch rescan: the client fires a separate VarbitChanged for every varbit
+		// affected by a varp write, so the tracked-varbit branch above already sees them.
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if ("pssstcompanion".equals(event.getGroup()))
+		{
+			reconcileLocalServer();
+			if ("enableSync".equals(event.getKey()))
+			{
+				if (config != null && config.enableSync())
+				{
+					clientThread.invokeLater(this::refreshAllClientState);
+				}
+			}
+			else if ("enableLocalServer".equals(event.getKey()) || "enableByosPush".equals(event.getKey()))
+			{
+				triggerDebouncedSync();
+			}
+		}
+	}
+
+	private void reconcileLocalServer()
+	{
+		if (localWebSocketServer == null)
+		{
+			return;
+		}
+
+		if (config != null && config.enableSync() && config.enableLocalServer())
+		{
+			localWebSocketServer.start(config.localServerPort(), config.bindLoopbackOnly(), config.syncToken());
+		}
+		else
+		{
+			localWebSocketServer.stop();
+		}
+	}
+
+	private boolean isBankOrInterface(int groupId)
+	{
+		return groupId == WidgetID.BANK_GROUP_ID // 12
+			|| groupId == 15  // Bank inventory
+			|| groupId == 192 // Bank deposit box
+			|| groupId == 465 // Grand Exchange
+			|| groupId == 631; // Seed vault
+	}
+
+	private synchronized void triggerDebouncedSync()
+	{
+		if (debounceTask != null && !debounceTask.isDone())
+		{
+			debounceTask.cancel(false);
+		}
+		// RuneLite's shared injected executor; never create our own threads
+		debounceTask = executor.schedule(this::syncState, DEBOUNCE_DELAY_SECONDS, TimeUnit.SECONDS);
+	}
+
+	private void syncState()
+	{
+		if (config == null || !config.enableSync())
+		{
+			log.debug("Sync skipped: enableSync is disabled in configuration");
+			return;
+		}
+
+		try
+		{
+			StateDTO state = buildCurrentState();
+			log.info("Sync state collected: inv={} bank={} potions={} skills={} ge={} varbits={}",
+				state.getInventory() != null ? state.getInventory().size() : 0,
+				state.getBank() != null ? state.getBank().size() : 0,
+				state.getPotionStorage() != null ? state.getPotionStorage().size() : 0,
+				state.getSkills() != null ? state.getSkills().size() : 0,
+				state.getGeOffers() != null ? state.getGeOffers().size() : 0,
+				state.getVarbits() != null ? state.getVarbits().size() : 0);
+
+			// 1. Broadcast over local WebSocket server wrapped in state envelope
+			if (config.enableLocalServer() && localWebSocketServer != null && localWebSocketServer.isRunning())
+			{
+				Map<String, Object> envelope = new HashMap<>();
+				envelope.put("data", state);
+				envelope.put("updated_at", System.currentTimeMillis());
+				String envelopeJson = gson.toJson(envelope);
+				localWebSocketServer.broadcast(envelopeJson);
+			}
+
+			// 2. Dispatch to BYOS outbound server if enabled
+			if (config.enableByosPush() && networkDispatcher != null)
+			{
+				networkDispatcher.dispatch(config.serverUrl(), config.syncToken(), true, state);
+			}
+		}
+		catch (Exception e)
+		{
+			log.warn("Sync failed", e);
+		}
+	}
+
+	private StateDTO buildCurrentState()
+	{
+		return StateDTO.builder()
+			.inventory(new ArrayList<>(currentInventory))
+			.bank(new ArrayList<>(currentBank))
+			.potionStorage(new ArrayList<>(currentPotionStorage))
+			.skills(new ArrayList<>(currentSkills))
+			.geOffers(new ArrayList<>(currentGeOffers))
+			.varbits(new HashMap<>(currentVarbits))
+			.build();
+	}
+
+	private void updateInventory(ItemContainer container)
+	{
+		if (container == null)
+		{
+			currentInventory = new ArrayList<>();
+			return;
+		}
+
+		List<StateDTO.ItemEntry> items = new ArrayList<>();
+		for (Item item : container.getItems())
+		{
+			if (item != null && item.getId() > 0 && item.getQuantity() > 0)
+			{
+				items.add(new StateDTO.ItemEntry(item.getId(), item.getQuantity()));
+			}
+		}
+		currentInventory = items;
+	}
+
+	private void updateBank(ItemContainer container)
+	{
+		if (container == null)
+		{
+			currentBank = new ArrayList<>();
+			return;
+		}
+
+		List<StateDTO.ItemEntry> items = new ArrayList<>();
+		for (Item item : container.getItems())
+		{
+			if (item != null && item.getId() > 0 && item.getQuantity() > 0)
+			{
+				items.add(new StateDTO.ItemEntry(item.getId(), item.getQuantity()));
+			}
+		}
+		currentBank = items;
+	}
+
+	private void refreshAllSkills()
+	{
+		if (client == null)
+		{
+			return;
+		}
+
+		List<StateDTO.SkillEntry> skills = new ArrayList<>();
+		for (Skill skill : Skill.values())
+		{
+			if (skill == Skill.OVERALL)
+			{
+				continue;
+			}
+			try
+			{
+				int level = client.getRealSkillLevel(skill);
+				int boosted = client.getBoostedSkillLevel(skill);
+				long xp = client.getSkillExperience(skill);
+				skills.add(new StateDTO.SkillEntry(skill.getName(), level, boosted, xp));
+			}
+			catch (Exception ignored)
+			{
+			}
+		}
+		currentSkills = skills;
+	}
+
+	private void refreshAllGeOffers()
+	{
+		if (client == null)
+		{
+			return;
+		}
+
+		GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+		if (offers == null)
+		{
+			return;
+		}
+
+		List<StateDTO.GeOfferEntry> geList = new ArrayList<>();
+		for (int i = 0; i < offers.length; i++)
+		{
+			GrandExchangeOffer offer = offers[i];
+			if (offer != null && offer.getItemId() > 0 && offer.getState() != GrandExchangeOfferState.EMPTY)
+			{
+				geList.add(new StateDTO.GeOfferEntry(
+					i + 1,
+					offer.getItemId(),
+					offer.getQuantitySold(),
+					offer.getTotalQuantity(),
+					offer.getPrice(),
+					offer.getSpent(),
+					offer.getState().name()
+				));
+			}
+		}
+		currentGeOffers = geList;
+	}
+
+	private int resolveCanonicalPotionId(int itemId)
+	{
+		if (client == null || itemId <= 0)
+		{
+			return itemId;
+		}
+
+		try
+		{
+			EnumComposition finishedList = client.getEnum(ENUM_POTIONSTORE_POTIONS);
+			if (finishedList != null)
+			{
+				for (int potionEnumId : finishedList.getIntVals())
+				{
+					EnumComposition potionEnum = client.getEnum(potionEnumId);
+					if (potionEnum != null)
+					{
+						for (int dose = 1; dose <= 4; dose++)
+						{
+							if (potionEnum.getIntValue(dose) == itemId)
+							{
+								int fourDoseId = potionEnum.getIntValue(4);
+								return fourDoseId > 0 ? fourDoseId : itemId;
+							}
+						}
+					}
+				}
+			}
+
+			EnumComposition unfinishedList = client.getEnum(ENUM_POTIONSTORE_UNFINISHED);
+			if (unfinishedList != null)
+			{
+				for (int unfinEnumId : unfinishedList.getIntVals())
+				{
+					EnumComposition unfinEnum = client.getEnum(unfinEnumId);
+					if (unfinEnum != null && unfinEnum.getIntValue(1) == itemId)
+					{
+						return itemId;
+					}
+				}
+			}
+		}
+		catch (Exception ignored)
+		{
+		}
+
+		return itemId;
+	}
+
+	private void updatePotionStorage()
+	{
+		if (client == null)
+		{
+			return;
+		}
+
+		Widget widget = client.getWidget(WIDGET_POTIONSTORE_ITEMS);
+		if (widget == null)
+		{
+			return;
+		}
+
+		Widget[] children = widget.getDynamicChildren();
+		if (children == null || children.length == 0)
+		{
+			return;
+		}
+
+		List<StateDTO.ItemEntry> potions = new ArrayList<>();
+		for (int i = 0; i + 4 < children.length; i += 5)
+		{
+			Widget itemWidget = children[i + 1];
+			Widget textWidget = children[i + 3];
+			if (itemWidget == null || textWidget == null)
+			{
+				continue;
+			}
+			int rawItemId = itemWidget.getItemId();
+			if (rawItemId <= 0)
+			{
+				continue;
+			}
+			String text = textWidget.getText();
+			if (text == null || text.trim().isEmpty())
+			{
+				continue;
+			}
+			try
+			{
+				String[] parts = text.split(":");
+				if (parts.length >= 2)
+				{
+					int doses = Integer.parseInt(parts[1].replace(",", "").trim());
+					if (doses > 0)
+					{
+						int canonicalId = resolveCanonicalPotionId(rawItemId);
+						potions.add(new StateDTO.ItemEntry(canonicalId, doses));
+					}
+				}
+			}
+			catch (Exception ignored)
+			{
+			}
+		}
+		if (!potions.isEmpty())
+		{
+			currentPotionStorage = potions;
+		}
+	}
+
+	private void refreshAllClientState()
+	{
+		if (client == null || client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		updateInventory(client.getItemContainer(InventoryID.INVENTORY));
+		ItemContainer bank = client.getItemContainer(InventoryID.BANK);
+		if (bank != null)
+		{
+			updateBank(bank);
+		}
+		refreshAllSkills();
+		refreshAllGeOffers();
+		updatePotionStorage();
+		refreshAllVarbits();
+		publishState();
+	}
+
+	private void refreshAllVarbits()
+	{
+		if (client == null)
+		{
+			return;
+		}
+
+		for (int varbitId : TRACKED_VARBITS)
+		{
+			try
+			{
+				int val = client.getVarbitValue(varbitId);
+				currentVarbits.put(varbitId, val);
+			}
+			catch (Exception ignored)
+			{
+			}
+		}
+
+		for (int varpId : TRACKED_VARPS)
+		{
+			try
+			{
+				int val = client.getVarpValue(varpId);
+				currentVarbits.put(varpId, val);
+			}
+			catch (Exception ignored)
+			{
+			}
+		}
+	}
+
+	private void publishState()
+	{
+		// Serialization happens once in syncState(); serializing here ran on every container/varbit event
+		triggerDebouncedSync();
+	}
+}

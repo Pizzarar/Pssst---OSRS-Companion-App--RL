@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="PssstPluginTest" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.pssst.runelite.PssstPluginTest" />
+    <module name="PssstRunelite.test" />
+    <option name="PROGRAM_PARAMETERS" value="--developer-mode --debug" />
+    <option name="VM_PARAMETERS" value="-ea --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.desktop/sun.awt=ALL-UNNAMED" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -2,3 +2,14 @@ node_modules/
 .wrangler/
 dist/
 .DS_Store
+
+# Gradle / IDE
+build/
+.gradle/
+.vscode/
+*.iml
+.idea/
+.gradle_home/
+.jdk17/
+local.properties
+out/
