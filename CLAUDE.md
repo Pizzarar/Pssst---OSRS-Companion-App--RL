@@ -10,7 +10,7 @@ Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` (see its `CLAUDE.md
 ## Commands (verified 2026-10-17)
 | What | Command | Notes |
 |---|---|---|
-| Build + tests | `.\gradlew.bat build` | ~25s, 5 tests. Deprecation notes from `Varbits`/`VarPlayer` etc. are known |
+| Build + tests | `.\gradlew.bat build` | ~25s, 17 tests (compliance, farming parity, tracker). Deprecation notes from `Varbits`/`VarPlayer` etc. are known |
 | Regenerate farming tables | `.\gradlew.bat generateFarmingData` | Rewrites `farming/FarmingData.java` from RuneLite's timetracking classes. Run when `FarmingParityTest` fails after a RuneLite update, then re-check `FarmingBounds` by hand |
 | Run dev client | `.\run-test.bat` | **User runs this in their own terminal.** Never launch the RuneLite GUI from an agent |
 | Worker typecheck | `npx tsc --noEmit` | |
