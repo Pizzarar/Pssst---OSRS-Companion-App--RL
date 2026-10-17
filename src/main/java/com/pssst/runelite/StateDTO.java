@@ -36,6 +36,9 @@ public class StateDTO
 	 */
 	private Map<Integer, Long> prices;
 
+	/** Quest name to "NOT_STARTED" | "IN_PROGRESS" | "FINISHED", from the client; see QuestSnapshot. */
+	private Map<String, String> quests;
+
 	/** Current Slayer assignment; amount is 0 and the names are absent when there is none. See SlayerReader. */
 	private SlayerEntry slayer;
 

@@ -91,6 +91,10 @@ public class CompanionPlugin extends Plugin
 		VarbitID.TOG_COUNTDOWN,
 		VarbitID.TOG_QP_BEFORE_RETURN,
 
+		// What RuneLite's Daily Tasks plugin also reads to decide who is eligible for which daily
+		VarbitID.IRONMAN,
+		VarbitID.HANDSAND_QUEST,
+
 		// Achievement Diaries (unlock tier counts for daily rewards)
 		VarbitID.VARROCK_DIARY_EASY_COMPLETE,
 		VarbitID.VARROCK_DIARY_MEDIUM_COMPLETE,
@@ -167,6 +171,7 @@ public class CompanionPlugin extends Plugin
 	private final Map<Integer, Integer> currentVarps = new ConcurrentHashMap<>();
 	// Replaced wholesale on the client thread, read by syncState() on the executor thread
 	private volatile StateDTO.SlayerEntry currentSlayer;
+	private volatile Map<String, String> currentQuests = new HashMap<>();
 
 	private PriceBook priceBook;
 	private FarmingTracker farmingTracker;
@@ -253,6 +258,7 @@ public class CompanionPlugin extends Plugin
 			priceBook.clear();
 		}
 		currentSlayer = null;
+		currentQuests = new HashMap<>();
 		if (farmingTracker != null)
 		{
 			farmingTracker.clear();
@@ -286,6 +292,7 @@ public class CompanionPlugin extends Plugin
 			tickCounter = 0;
 			// Prices drift; refresh them on the client thread (where ItemManager may be asked) before syncing
 			priceBook.record(heldIds());
+			refreshQuests();
 			syncState();
 		}
 	}
@@ -502,6 +509,7 @@ public class CompanionPlugin extends Plugin
 			.varps(new HashMap<>(currentVarps))
 			.prices(priceBook.forHeld(heldIds()))
 			.slayer(currentSlayer)
+			.quests(currentQuests)
 			.farming(farmingTracker != null ? farmingTracker.snapshot() : new ArrayList<>())
 			.birdhouses(birdhouseTracker != null ? birdhouseTracker.snapshot() : new ArrayList<>())
 			.build();
@@ -740,6 +748,7 @@ public class CompanionPlugin extends Plugin
 		updatePotionStorage();
 		refreshAllVarbits();
 		refreshSlayer();
+		refreshQuests();
 		publishState();
 	}
 
@@ -799,6 +808,16 @@ public class CompanionPlugin extends Plugin
 		{
 			currentSlayer = entry;
 		}
+	}
+
+	/** Quest states come from the client's own quest scripts, so this runs on the client thread only. */
+	private void refreshQuests()
+	{
+		if (client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		currentQuests = QuestSnapshot.of(Arrays.asList(Quest.values()), quest -> quest.getState(client));
 	}
 
 	/** Remembers the GE price of each item (client thread only). */

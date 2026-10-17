@@ -26,7 +26,8 @@ public class TrackedVarIdsTest
 			4471, 4472, 4473, 4474,                       // Western diary
 			4466, 4467, 4468, 4469,                       // Wilderness diary
 			7925, 7926, 7927, 7928,                       // Kourend diary
-			5557                                          // Autoweed
+			5557,                                         // Autoweed
+			1777, 1527                                    // Ironman status, Hand in the Sand progress (daily eligibility)
 		));
 		Assert.assertEquals(expected, CompanionPlugin.TRACKED_VARBITS);
 	}
