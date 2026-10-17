@@ -11,6 +11,7 @@ Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` (see its `CLAUDE.md
 | What | Command | Notes |
 |---|---|---|
 | Build + tests | `.\gradlew.bat build` | ~25s, 5 tests. Deprecation notes from `Varbits`/`VarPlayer` etc. are known |
+| Regenerate farming tables | `.\gradlew.bat generateFarmingData` | Rewrites `farming/FarmingData.java` from RuneLite's timetracking classes. Run when `FarmingParityTest` fails after a RuneLite update, then re-check `FarmingBounds` by hand |
 | Run dev client | `.\run-test.bat` | **User runs this in their own terminal.** Never launch the RuneLite GUI from an agent |
 | Worker typecheck | `npx tsc --noEmit` | |
 | Worker local | `npx wrangler dev` | Serves on :8787. Unauthenticated `GET /state` → 401 is expected. First run: `npx wrangler d1 execute augur-db --local --file=schema.sql` |
@@ -22,7 +23,8 @@ Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` (see its `CLAUDE.md
 - `compileOnly 'net.runelite:client:+'` (always latest).
 
 ## Cross-repo contract
-Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbits{} }`, with items as `{id, quantity}`. The Worker, the mock server (`PssstAndroid/pssst-mock-server`) and the plugin's local server wrap it as `{ data, updated_at }`. `updated_at` is seconds from the Worker and ms from WS/mock; Android normalizes to ms.
+Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbits{}, farming[] }`, with items as `{id, quantity}`. The Worker, the mock server (`PssstAndroid/pssst-mock-server`) and the plugin's local server wrap it as `{ data, updated_at }`. `updated_at` is seconds from the Worker and ms from WS/mock; Android normalizes to ms.
+`farming[]` entries are `{regionId, regionName, patchName, patchType, varbitId, value, observedAt, cropName, itemId, cropState, stage, stages, tickMinutes}`. `regionId + varbitId` identify a patch (the varbit alone is a per-region slot). `observedAt` is epoch **ms** and only moves when `value` changes. Crop fields are absent for unknown values. `tickMinutes` is 0 when nothing is advancing. ETA (Android side): `floor(observedAt / tick) * tick + (stages - 1 - stage) * tick`, with `tick = tickMinutes` in ms.
 Change one side → update `StateDTO.java` **and** `StateDto.kt` together, plus both servers if the envelope changes.
 
 ## Product rules (non-negotiable)

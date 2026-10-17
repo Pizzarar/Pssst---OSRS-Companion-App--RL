@@ -2,6 +2,7 @@ package com.pssst.runelite;
 
 import com.google.gson.Gson;
 import com.google.inject.Provides;
+import com.pssst.runelite.farming.FarmingTracker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,6 +27,7 @@ import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Quest;
+import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.Varbits;
@@ -37,6 +39,7 @@ import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.callback.ClientThread;
@@ -55,6 +58,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class CompanionPlugin extends Plugin
 {
+	private static final String CONFIG_GROUP = "pssstcompanion";
 	private static final int DEBOUNCE_DELAY_SECONDS = 2;
 	private static final int HEARTBEAT_TICKS = 1500; // 15 minutes = 1500 ticks @ 600ms/tick
 
@@ -113,21 +117,6 @@ public class CompanionPlugin extends Plugin
 		Varbits.DIARY_KOUREND_HARD,
 		Varbits.DIARY_KOUREND_ELITE,
 
-		// Farming patch states
-		Varbits.FARMING_4771,
-		Varbits.FARMING_4772,
-		Varbits.FARMING_4773,
-		Varbits.FARMING_4774,
-		Varbits.FARMING_4775,
-		Varbits.FARMING_7904,
-		Varbits.FARMING_7905,
-		Varbits.FARMING_7906,
-		Varbits.FARMING_7907,
-		Varbits.FARMING_7908,
-		Varbits.FARMING_7909,
-		Varbits.FARMING_7910,
-		Varbits.FARMING_7911,
-		Varbits.FARMING_7912,
 		Varbits.AUTOWEED,
 
 		// Grapes
@@ -187,6 +176,8 @@ public class CompanionPlugin extends Plugin
 	private volatile List<StateDTO.GeOfferEntry> currentGeOffers = new ArrayList<>();
 	private final Map<Integer, Integer> currentVarbits = new ConcurrentHashMap<>();
 
+	private FarmingTracker farmingTracker;
+
 	private ScheduledFuture<?> debounceTask;
 	private int tickCounter = 0;
 
@@ -205,6 +196,27 @@ public class CompanionPlugin extends Plugin
 			configManager.setConfiguration("pssstcompanion", "syncToken", token);
 			log.info("Generated sync token: {}", token);
 		}
+
+		farmingTracker = new FarmingTracker(client::getVarbitValue, new FarmingTracker.Store()
+		{
+			@Override
+			public String profileKey()
+			{
+				return configManager.getRSProfileKey();
+			}
+
+			@Override
+			public String get(String key)
+			{
+				return configManager.getRSProfileConfiguration(CONFIG_GROUP, key);
+			}
+
+			@Override
+			public void set(String key, String value)
+			{
+				configManager.setRSProfileConfiguration(CONFIG_GROUP, key, value);
+			}
+		}, System::currentTimeMillis);
 
 		reconcileLocalServer();
 
@@ -229,6 +241,10 @@ public class CompanionPlugin extends Plugin
 		currentSkills = new ArrayList<>();
 		currentGeOffers = new ArrayList<>();
 		currentVarbits.clear();
+		if (farmingTracker != null)
+		{
+			farmingTracker.clear();
+		}
 		tickCounter = 0;
 		log.info("Companion plugin stopped");
 	}
@@ -246,11 +262,28 @@ public class CompanionPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		observeFarmingPatches();
+
 		tickCounter++;
 		if (tickCounter >= HEARTBEAT_TICKS)
 		{
 			tickCounter = 0;
 			syncState();
+		}
+	}
+
+	/** Farming varbits only describe the patches of the region the player is standing in, so read them per tick. */
+	private void observeFarmingPatches()
+	{
+		Player player = client.getLocalPlayer();
+		if (farmingTracker == null || client.getGameState() != GameState.LOGGED_IN || player == null)
+		{
+			return;
+		}
+		WorldPoint location = WorldPoint.fromLocalInstance(client, player.getLocalLocation());
+		if (farmingTracker.update(location.getX(), location.getY(), location.getPlane()))
+		{
+			publishState();
 		}
 	}
 
@@ -434,6 +467,7 @@ public class CompanionPlugin extends Plugin
 			.skills(new ArrayList<>(currentSkills))
 			.geOffers(new ArrayList<>(currentGeOffers))
 			.varbits(new HashMap<>(currentVarbits))
+			.farming(farmingTracker != null ? farmingTracker.snapshot() : new ArrayList<>())
 			.build();
 	}
 
