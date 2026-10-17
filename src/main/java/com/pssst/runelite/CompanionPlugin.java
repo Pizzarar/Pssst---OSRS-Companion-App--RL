@@ -25,13 +25,11 @@ import net.runelite.api.EnumComposition;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
-import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Quest;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
-import net.runelite.api.Varbits;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
@@ -41,9 +39,11 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarPlayerID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -71,72 +71,58 @@ public class CompanionPlugin extends Plugin
 	private static final int ENUM_POTIONSTORE_POTIONS = 4826;
 	private static final int ENUM_POTIONSTORE_UNFINISHED = 4829;
 
-	private static final Set<Integer> TRACKED_VARBITS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+	static final Set<Integer> TRACKED_VARBITS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
 		// Miscellania
-		Varbits.KINGDOM_APPROVAL,
-		Varbits.KINGDOM_COFFER,
+		VarbitID.MISC_APPROVAL,
+		VarbitID.MISC_COFFERS,
 
 		// Daily resets & weekly activities
-		Varbits.DAILY_STAVES_COLLECTED,
-		Varbits.DAILY_HERB_BOXES_COLLECTED,
-		Varbits.DAILY_ESSENCE_COLLECTED,
-		Varbits.DAILY_RUNES_COLLECTED,
-		Varbits.DAILY_SAND_COLLECTED,
-		Varbits.DAILY_FLAX_STATE,
-		Varbits.DAILY_ARROWS_STATE,
-		Varbits.DAILY_BONEMEAL_STATE,
-		Varbits.DAILY_DYNAMITE_COLLECTED,
-		net.runelite.api.gameval.VarbitID.TOG_COUNTDOWN,
-		net.runelite.api.gameval.VarbitID.TOG_QP_BEFORE_RETURN,
+		VarbitID.ZAFF_LAST_CLAIMED,
+		VarbitID.NZONE_HERBBOXES_PURCHASED,
+		VarbitID.ARDOUGNE_FREE_ESSENCE,
+		VarbitID.LUNDAIL_LAST_CLAIMED,
+		VarbitID.YANILLE_SAND_CLAIMED,
+		VarbitID.SEERS_FREE_FLAX,
+		VarbitID.WESTERN_RANTZ_ARROWS,
+		VarbitID.MORYTANIA_SLIME_CLAIMED,
+		VarbitID.KOUREND_FREE_DYNAMITE,
+		VarbitID.TOG_COUNTDOWN,
+		VarbitID.TOG_QP_BEFORE_RETURN,
 
 		// Achievement Diaries (unlock tier counts for daily rewards)
-		Varbits.DIARY_VARROCK_EASY,
-		Varbits.DIARY_VARROCK_MEDIUM,
-		Varbits.DIARY_VARROCK_HARD,
-		Varbits.DIARY_VARROCK_ELITE,
-		Varbits.DIARY_MORYTANIA_EASY,
-		Varbits.DIARY_MORYTANIA_MEDIUM,
-		Varbits.DIARY_MORYTANIA_HARD,
-		Varbits.DIARY_MORYTANIA_ELITE,
-		Varbits.DIARY_ARDOUGNE_EASY,
-		Varbits.DIARY_ARDOUGNE_MEDIUM,
-		Varbits.DIARY_ARDOUGNE_HARD,
-		Varbits.DIARY_ARDOUGNE_ELITE,
-		Varbits.DIARY_KANDARIN_EASY,
-		Varbits.DIARY_KANDARIN_MEDIUM,
-		Varbits.DIARY_KANDARIN_HARD,
-		Varbits.DIARY_KANDARIN_ELITE,
-		Varbits.DIARY_WESTERN_EASY,
-		Varbits.DIARY_WESTERN_MEDIUM,
-		Varbits.DIARY_WESTERN_HARD,
-		Varbits.DIARY_WESTERN_ELITE,
-		Varbits.DIARY_WILDERNESS_EASY,
-		Varbits.DIARY_WILDERNESS_MEDIUM,
-		Varbits.DIARY_WILDERNESS_HARD,
-		Varbits.DIARY_WILDERNESS_ELITE,
-		Varbits.DIARY_KOUREND_EASY,
-		Varbits.DIARY_KOUREND_MEDIUM,
-		Varbits.DIARY_KOUREND_HARD,
-		Varbits.DIARY_KOUREND_ELITE,
+		VarbitID.VARROCK_DIARY_EASY_COMPLETE,
+		VarbitID.VARROCK_DIARY_MEDIUM_COMPLETE,
+		VarbitID.VARROCK_DIARY_HARD_COMPLETE,
+		VarbitID.VARROCK_DIARY_ELITE_COMPLETE,
+		VarbitID.MORYTANIA_DIARY_EASY_COMPLETE,
+		VarbitID.MORYTANIA_DIARY_MEDIUM_COMPLETE,
+		VarbitID.MORYTANIA_DIARY_HARD_COMPLETE,
+		VarbitID.MORYTANIA_DIARY_ELITE_COMPLETE,
+		VarbitID.ARDOUGNE_DIARY_EASY_COMPLETE,
+		VarbitID.ARDOUGNE_DIARY_MEDIUM_COMPLETE,
+		VarbitID.ARDOUGNE_DIARY_HARD_COMPLETE,
+		VarbitID.ARDOUGNE_DIARY_ELITE_COMPLETE,
+		VarbitID.KANDARIN_DIARY_EASY_COMPLETE,
+		VarbitID.KANDARIN_DIARY_MEDIUM_COMPLETE,
+		VarbitID.KANDARIN_DIARY_HARD_COMPLETE,
+		VarbitID.KANDARIN_DIARY_ELITE_COMPLETE,
+		VarbitID.WESTERN_DIARY_EASY_COMPLETE,
+		VarbitID.WESTERN_DIARY_MEDIUM_COMPLETE,
+		VarbitID.WESTERN_DIARY_HARD_COMPLETE,
+		VarbitID.WESTERN_DIARY_ELITE_COMPLETE,
+		VarbitID.WILDERNESS_DIARY_EASY_COMPLETE,
+		VarbitID.WILDERNESS_DIARY_MEDIUM_COMPLETE,
+		VarbitID.WILDERNESS_DIARY_HARD_COMPLETE,
+		VarbitID.WILDERNESS_DIARY_ELITE_COMPLETE,
+		VarbitID.KOUREND_DIARY_EASY_COMPLETE,
+		VarbitID.KOUREND_DIARY_MEDIUM_COMPLETE,
+		VarbitID.KOUREND_DIARY_HARD_COMPLETE,
+		VarbitID.KOUREND_DIARY_ELITE_COMPLETE,
 
-		Varbits.AUTOWEED,
-
-		// Grapes
-		Varbits.GRAPES_4953,
-		Varbits.GRAPES_4954,
-		Varbits.GRAPES_4955,
-		Varbits.GRAPES_4956,
-		Varbits.GRAPES_4957,
-		Varbits.GRAPES_4958,
-		Varbits.GRAPES_4959,
-		Varbits.GRAPES_4960,
-		Varbits.GRAPES_4961,
-		Varbits.GRAPES_4962,
-		Varbits.GRAPES_4963,
-		Varbits.GRAPES_4964
+		VarbitID.FARMING_BLOCKWEEDS
 	)));
 
-	private static final Set<Integer> TRACKED_VARPS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+	static final Set<Integer> TRACKED_VARPS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
 		VarPlayerID.NZONE_REWARDPOINTS
 	)));
 
@@ -317,12 +303,12 @@ public class CompanionPlugin extends Plugin
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
 		int containerId = event.getContainerId();
-		if (containerId == 93 || containerId == InventoryID.INVENTORY.getId())
+		if (containerId == InventoryID.INV)
 		{
 			updateInventory(event.getItemContainer());
 			publishState();
 		}
-		else if (containerId == 95 || containerId == InventoryID.BANK.getId())
+		else if (containerId == InventoryID.BANK)
 		{
 			updateBank(event.getItemContainer());
 			publishState();
@@ -424,11 +410,11 @@ public class CompanionPlugin extends Plugin
 
 	private boolean isBankOrInterface(int groupId)
 	{
-		return groupId == WidgetID.BANK_GROUP_ID // 12
-			|| groupId == 15  // Bank inventory
-			|| groupId == 192 // Bank deposit box
-			|| groupId == 465 // Grand Exchange
-			|| groupId == 631; // Seed vault
+		return groupId == InterfaceID.BANKMAIN
+			|| groupId == InterfaceID.BANKSIDE // Bank inventory
+			|| groupId == InterfaceID.BANK_DEPOSITBOX
+			|| groupId == InterfaceID.GE_OFFERS // Grand Exchange
+			|| groupId == InterfaceID.SEED_VAULT;
 	}
 
 	private synchronized void triggerDebouncedSync()
@@ -546,7 +532,7 @@ public class CompanionPlugin extends Plugin
 		List<StateDTO.SkillEntry> skills = new ArrayList<>();
 		for (Skill skill : Skill.values())
 		{
-			if (skill == Skill.OVERALL)
+			if ("Overall".equals(skill.getName()))
 			{
 				continue;
 			}
@@ -714,7 +700,7 @@ public class CompanionPlugin extends Plugin
 			return;
 		}
 
-		updateInventory(client.getItemContainer(InventoryID.INVENTORY));
+		updateInventory(client.getItemContainer(InventoryID.INV));
 		ItemContainer bank = client.getItemContainer(InventoryID.BANK);
 		if (bank != null)
 		{

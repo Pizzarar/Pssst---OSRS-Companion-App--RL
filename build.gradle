@@ -20,6 +20,7 @@ dependencies {
 }
 tasks.withType(JavaCompile) {
     options.release = 11
+    options.compilerArgs << "-Xlint:deprecation"
 }
 
 // Regenerates src/main/java/com/pssst/runelite/farming/FarmingData.java from RuneLite's timetracking classes
