@@ -105,6 +105,17 @@ public class StateDTO
 	{
 		private int id;
 		private int quantity;
+
+		/**
+		 * For a noted item (only the inventory holds them): the id of the unnoted item it stands for, which is what has
+		 * a name and a Grand Exchange price. Absent for everything else, so the app can simply use {@code id}.
+		 */
+		private Integer baseId;
+
+		public ItemEntry(int id, int quantity)
+		{
+			this(id, quantity, null);
+		}
 	}
 
 	@Data

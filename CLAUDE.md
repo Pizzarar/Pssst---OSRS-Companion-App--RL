@@ -9,7 +9,7 @@ Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` and the optional cl
 ## Commands (verified 2026-10-17)
 | What | Command | Notes |
 |---|---|---|
-| Build + tests | `.\gradlew.bat build` | ~25s, 37 tests (compliance, tracked-id pin, farming/birdhouse parity and trackers, slayer reader). Builds with `-Xlint:deprecation` and has no deprecation warnings (gameval only) |
+| Build + tests | `.\gradlew.bat build` | ~25s, 40 tests (compliance, noted-id rule, tracked-id pin, farming/birdhouse parity and trackers, slayer reader). Builds with `-Xlint:deprecation` and has no deprecation warnings (gameval only) |
 | Regenerate farming tables | `.\gradlew.bat generateFarmingData` | Rewrites `farming/FarmingData.java` from RuneLite's timetracking classes. Run when `FarmingParityTest` fails after a RuneLite update, then re-check `FarmingBounds` by hand |
 | Run dev client | `.\run-test.bat` | **User runs this in their own terminal.** Never launch the RuneLite GUI from an agent |
 
@@ -18,7 +18,7 @@ Companion to the Android app at `L:\Dev\Mobile\PssstAndroid` and the optional cl
 - `compileOnly 'net.runelite:client:+'` (always latest).
 
 ## Cross-repo contract
-Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbits{}, varps{}, slayer{}, farming[], birdhouses[] }`, with items as `{id, quantity}`. The Worker (`PssstWorker`), the mock server (`PssstAndroid/pssst-mock-server`) and the plugin's local server wrap it as `{ data, updated_at }`. `updated_at` is seconds from the Worker and ms from the local server and mock; Android normalizes to ms. Auth everywhere is `Authorization: Bearer <sync token>` (never a query parameter). The Worker accepts tokens of 16-128 chars of `A-Za-z0-9_-` and caps bodies at 256 KB.
+Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbits{}, varps{}, slayer{}, farming[], birdhouses[] }`, with items as `{id, quantity}` (inventory entries for noted items also carry `baseId`, the unnoted item id that has the name and price). The Worker (`PssstWorker`), the mock server (`PssstAndroid/pssst-mock-server`) and the plugin's local server wrap it as `{ data, updated_at }`. `updated_at` is seconds from the Worker and ms from the local server and mock; Android normalizes to ms. Auth everywhere is `Authorization: Bearer <sync token>` (never a query parameter). The Worker accepts tokens of 16-128 chars of `A-Za-z0-9_-` and caps bodies at 256 KB.
 `farming[]` entries are `{regionId, regionName, patchName, patchType, varbitId, value, observedAt, cropName, itemId, cropState, stage, stages, tickMinutes}`. `regionId + varbitId` identify a patch (the varbit alone is a per-region slot). `observedAt` is epoch **ms** and only moves when `value` changes. Crop fields are absent for unknown values. `tickMinutes` is 0 when nothing is advancing. ETA (Android side): `floor(observedAt / tick) * tick + (stages - 1 - stage) * tick`, with `tick = tickMinutes` in ms.
 Change one side → update `StateDTO.java` **and** `StateDto.kt` together, plus both servers if the envelope changes.
 

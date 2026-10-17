@@ -26,6 +26,7 @@ import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.Item;
+import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Quest;
 import net.runelite.api.Player;
@@ -505,7 +506,9 @@ public class CompanionPlugin extends Plugin
 		{
 			if (item != null && item.getId() > 0 && item.getQuantity() > 0)
 			{
-				items.add(new StateDTO.ItemEntry(item.getId(), item.getQuantity()));
+				ItemComposition definition = client.getItemDefinition(item.getId());
+				Integer baseId = ItemIds.notedBaseId(definition.getNote(), definition.getLinkedNoteId());
+				items.add(new StateDTO.ItemEntry(item.getId(), item.getQuantity(), baseId));
 			}
 		}
 		currentInventory = items;
