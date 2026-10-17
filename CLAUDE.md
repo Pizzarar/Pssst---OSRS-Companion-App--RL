@@ -22,6 +22,9 @@ Payload: `{ inventory[], bank[], potion_storage[], skills[], ge_offers[], varbit
 `farming[]` entries are `{regionId, regionName, patchName, patchType, varbitId, value, observedAt, cropName, itemId, cropState, stage, stages, tickMinutes}`. `regionId + varbitId` identify a patch (the varbit alone is a per-region slot). `observedAt` is epoch **ms** and only moves when `value` changes. Crop fields are absent for unknown values. `tickMinutes` is 0 when nothing is advancing. ETA (Android side): `floor(observedAt / tick) * tick + (stages - 1 - stage) * tick`, with `tick = tickMinutes` in ms.
 Change one side → update `StateDTO.java` **and** `StateDto.kt` together, plus both servers if the envelope changes.
 
+## Guardrails
+Read `GUIDELINES.md` (this repo) before touching networking, prices, assets or game logic. It holds the "not Mystix" rules, the five pre-merge questions, and the list of open deviations.
+
 ## Product rules (non-negotiable)
 - Plugin Hub compliant: injected `OkHttpClient`/`Gson`/executor only, async `enqueue`, no reflection, no subprocesses, no dynamic code, never block the client thread.
 - Free. Read-only and observational. No "do X now" instructions and no AI gear advice.
