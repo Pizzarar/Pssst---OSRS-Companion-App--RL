@@ -30,6 +30,30 @@ public class StateDTO
 	/** Last observation of each farming patch the player has stood next to; see FarmingTracker. */
 	private List<FarmingEntry> farming;
 
+	/** Last observation of each Fossil Island birdhouse space; see BirdhouseTracker. */
+	private List<BirdhouseEntry> birdhouses;
+
+	/**
+	 * One birdhouse space as last seen on Fossil Island. state is SEEDED, BUILT, EMPTY or UNKNOWN. houseType and
+	 * houseItemId are absent for empty/unknown. readyAt (epoch ms) is 50 minutes after the seeded value was first
+	 * observed and 0 when the space is not seeded. observedAt only moves when value changes.
+	 */
+	@Data
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class BirdhouseEntry
+	{
+		private String space;
+		private String spaceName;
+		private int varpId;
+		private int value;
+		private long observedAt;
+		private String state;
+		private String houseType;
+		private int houseItemId;
+		private long readyAt;
+	}
+
 	/**
 	 * One farming patch as last seen. regionId + varbitId identify the patch (the varbit alone is a per-region slot).
 	 * The crop fields are absent when the value matched no known state. observedAt is epoch milliseconds and only

@@ -1,5 +1,6 @@
 package com.pssst.runelite.farming;
 
+import com.pssst.runelite.ObservationStore;
 import com.pssst.runelite.StateDTO;
 import java.util.HashMap;
 import java.util.List;
@@ -24,9 +25,9 @@ public class FarmingTrackerTest
 	private String profile = "profileA";
 	private FarmingTracker tracker;
 
-	private FarmingTracker.Store store()
+	private ObservationStore store()
 	{
-		return new FarmingTracker.Store()
+		return new ObservationStore()
 		{
 			@Override
 			public String profileKey()

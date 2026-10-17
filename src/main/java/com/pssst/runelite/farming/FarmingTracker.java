@@ -1,5 +1,6 @@
 package com.pssst.runelite.farming;
 
+import com.pssst.runelite.ObservationStore;
 import com.pssst.runelite.StateDTO;
 import com.pssst.runelite.farming.FarmingData.Patch;
 import com.pssst.runelite.farming.FarmingData.Region;
@@ -23,17 +24,6 @@ import java.util.function.LongSupplier;
  */
 public class FarmingTracker
 {
-	/** Per-profile key/value storage (backed by ConfigManager's RS profile config in the plugin). */
-	public interface Store
-	{
-		/** @return the active profile's key, or null when no profile is loaded yet (e.g. just after login) */
-		String profileKey();
-
-		String get(String key);
-
-		void set(String key, String value);
-	}
-
 	private static final class Observation
 	{
 		final int value;
@@ -61,12 +51,12 @@ public class FarmingTracker
 	}
 
 	private final IntUnaryOperator varbitReader;
-	private final Store store;
+	private final ObservationStore store;
 	private final LongSupplier clockMs;
 	private final Map<String, Observation> observations = new ConcurrentHashMap<>();
 	private String loadedProfile;
 
-	public FarmingTracker(IntUnaryOperator varbitReader, Store store, LongSupplier clockMs)
+	public FarmingTracker(IntUnaryOperator varbitReader, ObservationStore store, LongSupplier clockMs)
 	{
 		this.varbitReader = varbitReader;
 		this.store = store;

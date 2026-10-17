@@ -2,6 +2,7 @@ package com.pssst.runelite;
 
 import com.google.gson.Gson;
 import com.google.inject.Provides;
+import com.pssst.runelite.birdhouse.BirdhouseTracker;
 import com.pssst.runelite.farming.FarmingTracker;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -135,10 +136,6 @@ public class CompanionPlugin extends Plugin
 	)));
 
 	private static final Set<Integer> TRACKED_VARPS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-		VarPlayer.BIRD_HOUSE_MEADOW_NORTH,
-		VarPlayer.BIRD_HOUSE_MEADOW_SOUTH,
-		VarPlayer.BIRD_HOUSE_VALLEY_NORTH,
-		VarPlayer.BIRD_HOUSE_VALLEY_SOUTH,
 		VarPlayer.NMZ_REWARD_POINTS,
 		VarPlayer.SLAYER_TASK_SIZE
 	)));
@@ -177,6 +174,7 @@ public class CompanionPlugin extends Plugin
 	private final Map<Integer, Integer> currentVarbits = new ConcurrentHashMap<>();
 
 	private FarmingTracker farmingTracker;
+	private BirdhouseTracker birdhouseTracker;
 
 	private ScheduledFuture<?> debounceTask;
 	private int tickCounter = 0;
@@ -197,7 +195,7 @@ public class CompanionPlugin extends Plugin
 			log.info("Generated sync token: {}", token);
 		}
 
-		farmingTracker = new FarmingTracker(client::getVarbitValue, new FarmingTracker.Store()
+		ObservationStore observationStore = new ObservationStore()
 		{
 			@Override
 			public String profileKey()
@@ -216,7 +214,9 @@ public class CompanionPlugin extends Plugin
 			{
 				configManager.setRSProfileConfiguration(CONFIG_GROUP, key, value);
 			}
-		}, System::currentTimeMillis);
+		};
+		farmingTracker = new FarmingTracker(client::getVarbitValue, observationStore, System::currentTimeMillis);
+		birdhouseTracker = new BirdhouseTracker(client::getVarpValue, observationStore, System::currentTimeMillis);
 
 		reconcileLocalServer();
 
@@ -245,6 +245,10 @@ public class CompanionPlugin extends Plugin
 		{
 			farmingTracker.clear();
 		}
+		if (birdhouseTracker != null)
+		{
+			birdhouseTracker.clear();
+		}
 		tickCounter = 0;
 		log.info("Companion plugin stopped");
 	}
@@ -262,7 +266,7 @@ public class CompanionPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		observeFarmingPatches();
+		observeLocationBoundState();
 
 		tickCounter++;
 		if (tickCounter >= HEARTBEAT_TICKS)
@@ -272,16 +276,22 @@ public class CompanionPlugin extends Plugin
 		}
 	}
 
-	/** Farming varbits only describe the patches of the region the player is standing in, so read them per tick. */
-	private void observeFarmingPatches()
+	/**
+	 * Farming patch varbits and birdhouse varps only describe what is near the player (the region's patches, or
+	 * Fossil Island), so they are read per tick, with the player's location, instead of from the global var map.
+	 */
+	private void observeLocationBoundState()
 	{
 		Player player = client.getLocalPlayer();
-		if (farmingTracker == null || client.getGameState() != GameState.LOGGED_IN || player == null)
+		if (farmingTracker == null || birdhouseTracker == null
+			|| client.getGameState() != GameState.LOGGED_IN || player == null)
 		{
 			return;
 		}
 		WorldPoint location = WorldPoint.fromLocalInstance(client, player.getLocalLocation());
-		if (farmingTracker.update(location.getX(), location.getY(), location.getPlane()))
+		boolean farmingChanged = farmingTracker.update(location.getX(), location.getY(), location.getPlane());
+		boolean birdhousesChanged = birdhouseTracker.update(location.getX(), location.getY(), location.getPlane());
+		if (farmingChanged || birdhousesChanged)
 		{
 			publishState();
 		}
@@ -468,6 +478,7 @@ public class CompanionPlugin extends Plugin
 			.geOffers(new ArrayList<>(currentGeOffers))
 			.varbits(new HashMap<>(currentVarbits))
 			.farming(farmingTracker != null ? farmingTracker.snapshot() : new ArrayList<>())
+			.birdhouses(birdhouseTracker != null ? birdhouseTracker.snapshot() : new ArrayList<>())
 			.build();
 	}
 
