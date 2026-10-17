@@ -22,11 +22,13 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.EnumComposition;
+import net.runelite.api.EnumID;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.ScriptID;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Quest;
 import net.runelite.api.Player;
@@ -66,12 +68,12 @@ public class CompanionPlugin extends Plugin
 	private static final int DEBOUNCE_DELAY_SECONDS = 2;
 	private static final int HEARTBEAT_TICKS = 1500; // 15 minutes = 1500 ticks @ 600ms/tick
 
-	// Potion Storage Script & Widget IDs
-	private static final int SCRIPT_POTIONSTORE_BUILD = 6080;
-	private static final int SCRIPT_POTIONSTORE_UPDATE = 6555;
-	private static final int WIDGET_POTIONSTORE_ITEMS = 786490; // (12 << 16) | 58
-	private static final int ENUM_POTIONSTORE_POTIONS = 4826;
-	private static final int ENUM_POTIONSTORE_UNFINISHED = 4829;
+	// Potion storage: the same named enums, scripts and widget RuneLite's PotionStorage reads, not bare numbers
+	private static final int SCRIPT_POTIONSTORE_BUILD = ScriptID.POTIONSTORE_BUILD;
+	private static final int SCRIPT_POTIONSTORE_UPDATE = ScriptID.POTIONSTORE_DOSE_CHANGE;
+	private static final int WIDGET_POTIONSTORE_ITEMS = InterfaceID.Bankmain.POTIONSTORE_ITEMS;
+	private static final int ENUM_POTIONSTORE_POTIONS = EnumID.POTIONSTORE_POTIONS;
+	private static final int ENUM_POTIONSTORE_UNFINISHED = EnumID.POTIONSTORE_UNFINISHED_POTIONS;
 
 	static final Set<Integer> TRACKED_VARBITS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
 		// Miscellania
