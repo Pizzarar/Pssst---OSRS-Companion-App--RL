@@ -16,4 +16,10 @@ final class ItemIds
 	{
 		return note != -1 && linkedNoteId > 0 ? linkedNoteId : null;
 	}
+
+	/** The id that has the name and the price: the unnoted id for a noted item, the item's own id otherwise. */
+	static int pricingId(StateDTO.ItemEntry entry)
+	{
+		return entry.getBaseId() != null ? entry.getBaseId() : entry.getId();
+	}
 }

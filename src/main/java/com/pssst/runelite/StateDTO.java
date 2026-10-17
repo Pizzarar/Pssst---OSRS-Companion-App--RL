@@ -30,6 +30,12 @@ public class StateDTO
 	/** Raw varp values by varp id. Varps and varbits have separate id spaces, so they must not share a map. */
 	private Map<Integer, Integer> varps;
 
+	/**
+	 * Grand Exchange price (gp) of each item held or on offer, keyed by the id that has the price (the unnoted id for
+	 * noted items), straight from RuneLite's ItemManager so the app needs no third party for prices.
+	 */
+	private Map<Integer, Long> prices;
+
 	/** Current Slayer assignment; amount is 0 and the names are absent when there is none. See SlayerReader. */
 	private SlayerEntry slayer;
 

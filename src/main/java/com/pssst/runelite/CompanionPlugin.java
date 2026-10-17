@@ -48,6 +48,7 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -137,6 +138,9 @@ public class CompanionPlugin extends Plugin
 	private ConfigManager configManager;
 
 	@Inject
+	private ItemManager itemManager;
+
+	@Inject
 	private CompanionConfig config;
 
 	@Inject
@@ -164,6 +168,7 @@ public class CompanionPlugin extends Plugin
 	// Replaced wholesale on the client thread, read by syncState() on the executor thread
 	private volatile StateDTO.SlayerEntry currentSlayer;
 
+	private PriceBook priceBook;
 	private FarmingTracker farmingTracker;
 	private BirdhouseTracker birdhouseTracker;
 
@@ -193,6 +198,8 @@ public class CompanionPlugin extends Plugin
 			configManager.setConfiguration("pssstcompanion", "syncToken", token.toString());
 			log.info("Generated a new sync token (shown in the plugin settings)");
 		}
+
+		priceBook = new PriceBook(itemManager::getItemPrice);
 
 		ObservationStore observationStore = new ObservationStore()
 		{
@@ -241,6 +248,10 @@ public class CompanionPlugin extends Plugin
 		currentGeOffers = new ArrayList<>();
 		currentVarbits.clear();
 		currentVarps.clear();
+		if (priceBook != null)
+		{
+			priceBook.clear();
+		}
 		currentSlayer = null;
 		if (farmingTracker != null)
 		{
@@ -273,6 +284,8 @@ public class CompanionPlugin extends Plugin
 		if (tickCounter >= HEARTBEAT_TICKS)
 		{
 			tickCounter = 0;
+			// Prices drift; refresh them on the client thread (where ItemManager may be asked) before syncing
+			priceBook.record(heldIds());
 			syncState();
 		}
 	}
@@ -487,6 +500,7 @@ public class CompanionPlugin extends Plugin
 			.geOffers(new ArrayList<>(currentGeOffers))
 			.varbits(new HashMap<>(currentVarbits))
 			.varps(new HashMap<>(currentVarps))
+			.prices(priceBook.forHeld(heldIds()))
 			.slayer(currentSlayer)
 			.farming(farmingTracker != null ? farmingTracker.snapshot() : new ArrayList<>())
 			.birdhouses(birdhouseTracker != null ? birdhouseTracker.snapshot() : new ArrayList<>())
@@ -512,6 +526,7 @@ public class CompanionPlugin extends Plugin
 			}
 		}
 		currentInventory = items;
+		recordPrices(items);
 	}
 
 	private void updateBank(ItemContainer container)
@@ -531,6 +546,7 @@ public class CompanionPlugin extends Plugin
 			}
 		}
 		currentBank = items;
+		recordPrices(items);
 	}
 
 	private void refreshAllSkills()
@@ -592,6 +608,7 @@ public class CompanionPlugin extends Plugin
 			}
 		}
 		currentGeOffers = geList;
+		priceBook.record(heldIds());
 	}
 
 	private int resolveCanonicalPotionId(int itemId)
@@ -701,6 +718,7 @@ public class CompanionPlugin extends Plugin
 		if (!potions.isEmpty())
 		{
 			currentPotionStorage = potions;
+			recordPrices(potions);
 		}
 	}
 
@@ -781,6 +799,38 @@ public class CompanionPlugin extends Plugin
 		{
 			currentSlayer = entry;
 		}
+	}
+
+	/** Remembers the GE price of each item (client thread only). */
+	private void recordPrices(List<StateDTO.ItemEntry> entries)
+	{
+		Set<Integer> ids = new HashSet<>();
+		for (StateDTO.ItemEntry entry : entries)
+		{
+			ids.add(ItemIds.pricingId(entry));
+		}
+		priceBook.record(ids);
+	}
+
+	/** Every item id currently held or on offer, as the id that carries its name and price. */
+	private Set<Integer> heldIds()
+	{
+		Set<Integer> ids = new HashSet<>();
+		for (List<StateDTO.ItemEntry> entries : Arrays.asList(currentInventory, currentBank, currentPotionStorage))
+		{
+			for (StateDTO.ItemEntry entry : entries)
+			{
+				ids.add(ItemIds.pricingId(entry));
+			}
+		}
+		for (StateDTO.GeOfferEntry offer : currentGeOffers)
+		{
+			if (offer.getItemId() > 0)
+			{
+				ids.add(offer.getItemId());
+			}
+		}
+		return ids;
 	}
 
 	private void refreshAllVarbits()
