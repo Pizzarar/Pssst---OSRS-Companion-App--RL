@@ -27,6 +27,25 @@ public class StateDTO
 
 	private Map<Integer, Integer> varbits;
 
+	/** Raw varp values by varp id. Varps and varbits have separate id spaces, so they must not share a map. */
+	private Map<Integer, Integer> varps;
+
+	/** Current Slayer assignment; amount is 0 and the names are absent when there is none. See SlayerReader. */
+	private SlayerEntry slayer;
+
+	@Data
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class SlayerEntry
+	{
+		private String taskName;
+		private String taskLocation;
+		private int amount;
+		private int initialAmount;
+		private int points;
+		private int streak;
+	}
+
 	/** Last observation of each farming patch the player has stood next to; see FarmingTracker. */
 	private List<FarmingEntry> farming;
 

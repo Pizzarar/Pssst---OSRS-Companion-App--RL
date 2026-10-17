@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.inject.Provides;
 import com.pssst.runelite.birdhouse.BirdhouseTracker;
 import com.pssst.runelite.farming.FarmingTracker;
+import com.pssst.runelite.slayer.SlayerReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -30,7 +31,6 @@ import net.runelite.api.ItemContainer;
 import net.runelite.api.Quest;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
-import net.runelite.api.VarPlayer;
 import net.runelite.api.Varbits;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -41,6 +41,7 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.callback.ClientThread;
@@ -136,8 +137,7 @@ public class CompanionPlugin extends Plugin
 	)));
 
 	private static final Set<Integer> TRACKED_VARPS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-		VarPlayer.NMZ_REWARD_POINTS,
-		VarPlayer.SLAYER_TASK_SIZE
+		VarPlayerID.NZONE_REWARDPOINTS
 	)));
 
 	@Inject
@@ -172,6 +172,10 @@ public class CompanionPlugin extends Plugin
 	private volatile List<StateDTO.SkillEntry> currentSkills = new ArrayList<>();
 	private volatile List<StateDTO.GeOfferEntry> currentGeOffers = new ArrayList<>();
 	private final Map<Integer, Integer> currentVarbits = new ConcurrentHashMap<>();
+	// Varps and varbits have separate id spaces; keeping them apart avoids one overwriting the other
+	private final Map<Integer, Integer> currentVarps = new ConcurrentHashMap<>();
+	// Replaced wholesale on the client thread, read by syncState() on the executor thread
+	private volatile StateDTO.SlayerEntry currentSlayer;
 
 	private FarmingTracker farmingTracker;
 	private BirdhouseTracker birdhouseTracker;
@@ -241,6 +245,8 @@ public class CompanionPlugin extends Plugin
 		currentSkills = new ArrayList<>();
 		currentGeOffers = new ArrayList<>();
 		currentVarbits.clear();
+		currentVarps.clear();
+		currentSlayer = null;
 		if (farmingTracker != null)
 		{
 			farmingTracker.clear();
@@ -363,9 +369,17 @@ public class CompanionPlugin extends Plugin
 		}
 		else if (varpId != -1 && TRACKED_VARPS.contains(varpId))
 		{
-			// NOTE: varps share the varbits map; IDs are disjoint today but this is a latent collision
-			currentVarbits.put(varpId, event.getValue());
+			currentVarps.put(varpId, event.getValue());
 			publishState();
+		}
+		if (isSlayerVar(varpId, varbitId))
+		{
+			// RuneLite's Slayer plugin defers the DB lookups a tick for the same reason: the varps are mid-update
+			clientThread.invokeLater(() ->
+			{
+				refreshSlayer();
+				publishState();
+			});
 		}
 		// No else-branch rescan: the client fires a separate VarbitChanged for every varbit
 		// affected by a varp write, so the tracked-varbit branch above already sees them.
@@ -477,6 +491,8 @@ public class CompanionPlugin extends Plugin
 			.skills(new ArrayList<>(currentSkills))
 			.geOffers(new ArrayList<>(currentGeOffers))
 			.varbits(new HashMap<>(currentVarbits))
+			.varps(new HashMap<>(currentVarps))
+			.slayer(currentSlayer)
 			.farming(farmingTracker != null ? farmingTracker.snapshot() : new ArrayList<>())
 			.birdhouses(birdhouseTracker != null ? birdhouseTracker.snapshot() : new ArrayList<>())
 			.build();
@@ -708,7 +724,66 @@ public class CompanionPlugin extends Plugin
 		refreshAllGeOffers();
 		updatePotionStorage();
 		refreshAllVarbits();
+		refreshSlayer();
 		publishState();
+	}
+
+	private static boolean isSlayerVar(int varpId, int varbitId)
+	{
+		for (int id : SlayerReader.WATCHED_VARPS)
+		{
+			if (id == varpId)
+			{
+				return true;
+			}
+		}
+		for (int id : SlayerReader.WATCHED_VARBITS)
+		{
+			if (id == varbitId)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Must run on the client thread (varp reads and DB table lookups). Keeps the previous value if names are not resolvable yet. */
+	private void refreshSlayer()
+	{
+		if (client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		StateDTO.SlayerEntry entry = SlayerReader.read(new SlayerReader.Game()
+		{
+			@Override
+			public int varp(int id)
+			{
+				return client.getVarpValue(id);
+			}
+
+			@Override
+			public int varbit(int id)
+			{
+				return client.getVarbitValue(id);
+			}
+
+			@Override
+			public List<Integer> dbRowsByValue(int table, int column, Object value)
+			{
+				return client.getDBRowsByValue(table, column, 0, value);
+			}
+
+			@Override
+			public Object dbField(int row, int column)
+			{
+				return client.getDBTableField(row, column, 0)[0];
+			}
+		});
+		if (entry != null)
+		{
+			currentSlayer = entry;
+		}
 	}
 
 	private void refreshAllVarbits()
@@ -735,7 +810,7 @@ public class CompanionPlugin extends Plugin
 			try
 			{
 				int val = client.getVarpValue(varpId);
-				currentVarbits.put(varpId, val);
+				currentVarps.put(varpId, val);
 			}
 			catch (Exception ignored)
 			{

@@ -47,16 +47,19 @@ public class CompanionPluginComplianceTest
 			))
 			.varbits(new HashMap<Integer, Integer>()
 			{{
-				put(4068, 500); // SLAYER_REWARD_POINTS
-				put(261, 35);   // SLAYER_TASK_SIZE
+				put(4068, 500); // SLAYER_POINTS
+			}})
+			.varps(new HashMap<Integer, Integer>()
+			{{
+				put(1060, 1500); // NZONE_REWARDPOINTS
 			}})
 			.build();
 
 		String json = gson.toJson(dto);
 		JsonObject obj = new JsonParser().parse(json).getAsJsonObject();
 
-		// Ensure slayer key was completely removed
-		Assert.assertFalse("DTO must not contain string-based slayer object", obj.has("slayer"));
+		// slayer is a typed object, and is simply absent until the plugin has read an assignment
+		Assert.assertFalse("slayer must be omitted when unset", obj.has("slayer"));
 
 		// Ensure inventory has only int id & quantity
 		Assert.assertTrue(obj.has("inventory"));
@@ -90,6 +93,11 @@ public class CompanionPluginComplianceTest
 			Integer.parseInt(entry.getKey());
 			Assert.assertTrue(entry.getValue().getAsJsonPrimitive().isNumber());
 		}
+
+		// Varps live in their own map: same integer-only shape, separate id space
+		JsonObject varpsObj = obj.getAsJsonObject("varps");
+		Assert.assertEquals(1500, varpsObj.get("1060").getAsInt());
+		Assert.assertFalse("varps must not leak into varbits", varbitsObj.has("1060"));
 	}
 
 	@Test
