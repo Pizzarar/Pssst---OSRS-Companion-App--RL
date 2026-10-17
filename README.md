@@ -4,6 +4,10 @@ A RuneLite plugin that mirrors a read-only snapshot of your character to the **P
 
 Free, read-only and observational: it never sends input to the game, never tells you what to do, and gives no gear or strategy advice. It does not touch the OSRS Wiki.
 
+## Setup
+
+Install Pssst Companion, turn on **Enable Sync**, copy the **Sync Token**, and pair the Pssst app with your PC (same Wi-Fi, a VPN such as Tailscale, or your own server). Step-by-step instructions: [docs/setup.md](docs/setup.md).
+
 ## Off by default
 
 Nothing leaves your PC until you turn on **Enable Sync**. Two ways to get the data to your phone, both opt-in:

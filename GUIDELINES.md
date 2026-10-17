@@ -70,7 +70,7 @@ Compliant, each with a test that fails if it regresses:
 - **Sourced, not guessed:** farming, birdhouses and slayer are ported from RuneLite with parity tests; dailies from `DailyTasksPlugin` (`DailyTasksParityTest` pins its constants and ids); Miscellania from `KingdomPlugin` (approval out of 127, raw coffer); quest states come from the client; potion storage uses RuneLite's named constants (`PotionStorageConstantsTest`).
 - No foreground service, default notification sound, nothing paid.
 
-Shown raw or marked unverified (not guessed):
+Shown raw or marked unverified (not guessed); the plan to close these is in `docs/plans/unverified-logic.md`:
 - **Tears of Guthix:** RuneLite has no rule for the two varbits, so the app shows "Countdown: N, Quest points check: N" and never calls it available.
 - **Farming payments** (`FarmingPaymentCatalog`): hand-written, unchecked; the Payments tab says so. Before removing the notice, verify each row and record its source in the file.
 
