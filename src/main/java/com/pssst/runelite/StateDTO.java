@@ -27,6 +27,34 @@ public class StateDTO
 
 	private Map<Integer, Integer> varbits;
 
+	/** Last observation of each farming patch the player has stood next to; see FarmingTracker. */
+	private List<FarmingEntry> farming;
+
+	/**
+	 * One farming patch as last seen. regionId + varbitId identify the patch (the varbit alone is a per-region slot).
+	 * The crop fields are absent when the value matched no known state. observedAt is epoch milliseconds and only
+	 * moves when value changes. tickMinutes is 0 when nothing is advancing (diseased, dead, empty, no regrow).
+	 */
+	@Data
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class FarmingEntry
+	{
+		private int regionId;
+		private String regionName;
+		private String patchName;
+		private String patchType;
+		private int varbitId;
+		private int value;
+		private long observedAt;
+		private String cropName;
+		private int itemId;
+		private String cropState;
+		private int stage;
+		private int stages;
+		private int tickMinutes;
+	}
+
 	@Data
 	@NoArgsConstructor
 	@AllArgsConstructor
