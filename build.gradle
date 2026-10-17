@@ -22,6 +22,15 @@ tasks.withType(JavaCompile) {
     options.release = 11
 }
 
+// Regenerates src/main/java/com/pssst/runelite/farming/FarmingData.java from RuneLite's timetracking classes
+tasks.register('generateFarmingData', JavaExec) {
+    group = 'Build'
+    description = 'Regenerates FarmingData.java from the RuneLite client on the test classpath'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.pssst.runelite.farming.FarmingDataGenerator'
+    args = ["${projectDir}/src/main/java/com/pssst/runelite/farming/FarmingData.java"]
+}
+
 tasks.register('testPlugin', JavaExec) {
     group = 'Execution'
     description = 'Runs RuneLite with CompanionPlugin'
