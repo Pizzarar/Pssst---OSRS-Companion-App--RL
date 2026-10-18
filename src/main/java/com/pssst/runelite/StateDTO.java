@@ -14,6 +14,19 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class StateDTO
 {
+	/**
+	 * Epoch ms of the last moment the game itself fed this snapshot: a game event, or the 15-minute heartbeat while
+	 * logged in. This is when the data was true in game, not when it was served (the envelope's updated_at), so a
+	 * snapshot saved by an earlier session keeps its original value.
+	 */
+	private long observedAt;
+
+	/**
+	 * Epoch ms when the bank and potion storage were last read from the open bank. The game only shows them while the
+	 * bank is open, so after a restart they are carried over from the saved snapshot; 0 when never observed.
+	 */
+	private long bankObservedAt;
+
 	private List<ItemEntry> inventory;
 	private List<ItemEntry> bank;
 

@@ -5,6 +5,11 @@ import com.google.inject.Provides;
 import com.pssst.runelite.birdhouse.BirdhouseTracker;
 import com.pssst.runelite.farming.FarmingTracker;
 import com.pssst.runelite.slayer.SlayerReader;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,14 +55,18 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.NavigationButton;
 
 @Slf4j
 @PluginDescriptor(
 	name = "Pssst Companion",
+	internalName = "pssst-companion", // required for getPluginDirectory(); the saved snapshot lives there
 	description = "Syncs player state to the Pssst Android app",
 	tags = {"pssst", "companion", "sync"},
 	hidden = false
@@ -161,6 +170,9 @@ public class CompanionPlugin extends Plugin
 	@Inject
 	private ScheduledExecutorService executor;
 
+	@Inject
+	private ClientToolbar clientToolbar;
+
 	// volatile: written on the client thread, read by syncState() on the executor thread.
 	// Lists are replaced wholesale, never mutated in place, so a volatile reference is sufficient.
 	private volatile List<StateDTO.ItemEntry> currentInventory = new ArrayList<>();
@@ -174,6 +186,22 @@ public class CompanionPlugin extends Plugin
 	// Replaced wholesale on the client thread, read by syncState() on the executor thread
 	private volatile StateDTO.SlayerEntry currentSlayer;
 	private volatile Map<String, String> currentQuests = new HashMap<>();
+
+	// When the game last fed the snapshot (event or heartbeat while logged in); see StateDTO.observedAt
+	private volatile long observedAtMs;
+	// When the bank / potion storage were last read from the open bank, or carried over from the saved snapshot
+	private volatile long bankObservedAtMs;
+	// True once this RuneLite session has seen the logged-in game. Until then the saved snapshot is what gets served.
+	private volatile boolean liveThisSession;
+	// The RS profile the live state belongs to; written on the client thread, read when saving
+	private volatile String profileKey;
+	// The previous session's snapshot, loaded off-thread at startup; consumed once the profile is known
+	private volatile SnapshotStore.Snapshot persisted;
+	private final Object publishLock = new Object();
+
+	private SnapshotStore snapshotStore;
+	private PairingPanel pairingPanel;
+	private NavigationButton navigationButton;
 
 	private PriceBook priceBook;
 	private FarmingTracker farmingTracker;
@@ -231,6 +259,18 @@ public class CompanionPlugin extends Plugin
 		farmingTracker = new FarmingTracker(client::getVarbitValue, observationStore, System::currentTimeMillis);
 		birdhouseTracker = new BirdhouseTracker(client::getVarpValue, observationStore, System::currentTimeMillis);
 
+		snapshotStore = new SnapshotStore(this::getPluginDirectory, gson);
+		executor.execute(this::loadPersisted); // disk read: not here, and never on the client thread
+
+		pairingPanel = new PairingPanel(config, executor, () -> localStateServer != null && localStateServer.isRunning());
+		navigationButton = NavigationButton.builder()
+			.tooltip("Pssst Companion")
+			.icon(panelIcon())
+			.priority(10)
+			.panel(pairingPanel)
+			.build();
+		clientToolbar.addNavigation(navigationButton);
+
 		reconcileLocalServer();
 
 		log.info("Pssst Companion plugin started!");
@@ -244,6 +284,22 @@ public class CompanionPlugin extends Plugin
 		{
 			debounceTask.cancel(false);
 		}
+		flushSnapshot();
+		if (navigationButton != null)
+		{
+			clientToolbar.removeNavigation(navigationButton);
+			navigationButton = null;
+		}
+		if (pairingPanel != null)
+		{
+			pairingPanel.dispose();
+			pairingPanel = null;
+		}
+		liveThisSession = false;
+		persisted = null;
+		profileKey = null;
+		observedAtMs = 0;
+		bankObservedAtMs = 0;
 		if (localStateServer != null)
 		{
 			localStateServer.stop();
@@ -286,6 +342,7 @@ public class CompanionPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		resolveProfile();
 		observeLocationBoundState();
 
 		tickCounter++;
@@ -295,7 +352,78 @@ public class CompanionPlugin extends Plugin
 			// Prices drift; refresh them on the client thread (where ItemManager may be asked) before syncing
 			priceBook.record(heldIds());
 			refreshQuests();
-			syncState();
+			// Serializing and saving the whole state is not client-thread work: hand it to the executor
+			observedAtMs = System.currentTimeMillis();
+			triggerDebouncedSync();
+		}
+	}
+
+	@Subscribe
+	public void onClientShutdown(ClientShutdown event)
+	{
+		// RuneLite is closing: make sure the last state reaches the disk before the JVM exits
+		SnapshotStore.Snapshot snapshot = currentSnapshot();
+		if (snapshot != null)
+		{
+			event.waitFor(executor.submit(() -> snapshotStore.write(snapshot)));
+		}
+	}
+
+	/**
+	 * Client thread. The RS profile is known a moment after login. The first time it is, the previous session's bank and
+	 * potion storage are carried over if they belong to the same profile (the game only shows them while the bank is
+	 * open, so otherwise the phone would be told the bank is empty). If a different profile logs in later, the old
+	 * profile's bank is dropped so it is never shown as someone else's.
+	 */
+	private void resolveProfile()
+	{
+		String key = configManager.getRSProfileKey();
+		if (key == null || key.equals(profileKey))
+		{
+			return;
+		}
+		boolean switched = profileKey != null;
+		profileKey = key;
+		SnapshotStore.Snapshot snapshot = persisted;
+		persisted = null;
+		if (switched)
+		{
+			currentBank = new ArrayList<>();
+			currentPotionStorage = new ArrayList<>();
+			bankObservedAtMs = 0;
+			ItemContainer bank = client.getItemContainer(InventoryID.BANK);
+			if (bank != null)
+			{
+				updateBank(bank);
+			}
+		}
+		else
+		{
+			carryOver(BankCarry.from(snapshot, key));
+		}
+		publishState();
+	}
+
+	private void carryOver(BankCarry carry)
+	{
+		if (carry == null)
+		{
+			return;
+		}
+		if (currentBank.isEmpty() && !carry.bank.isEmpty())
+		{
+			currentBank = carry.bank;
+			recordPrices(currentBank);
+			bankObservedAtMs = carry.observedAt;
+		}
+		if (currentPotionStorage.isEmpty() && !carry.potionStorage.isEmpty())
+		{
+			currentPotionStorage = carry.potionStorage;
+			recordPrices(currentPotionStorage);
+			if (bankObservedAtMs == 0)
+			{
+				bankObservedAtMs = carry.observedAt;
+			}
 		}
 	}
 
@@ -408,11 +536,20 @@ public class CompanionPlugin extends Plugin
 		if ("pssstcompanion".equals(event.getGroup()))
 		{
 			reconcileLocalServer();
+			if (pairingPanel != null)
+			{
+				pairingPanel.refresh();
+			}
 			if ("enableSync".equals(event.getKey()))
 			{
 				if (config != null && config.enableSync())
 				{
 					clientThread.invokeLater(this::refreshAllClientState);
+				}
+				else if (snapshotStore != null)
+				{
+					// Sync off means nothing about the player stays on disk for the app
+					executor.execute(snapshotStore::delete);
 				}
 			}
 			else if ("enableLocalServer".equals(event.getKey()) || "enableByosPush".equals(event.getKey()))
@@ -432,6 +569,7 @@ public class CompanionPlugin extends Plugin
 		if (config != null && config.enableSync() && config.enableLocalServer())
 		{
 			localStateServer.start(config.localServerPort(), config.bindLoopbackOnly(), config.syncToken());
+			executor.execute(this::servePersistedIfIdle);
 		}
 		else
 		{
@@ -465,6 +603,12 @@ public class CompanionPlugin extends Plugin
 			log.debug("Sync skipped: enableSync is disabled in configuration");
 			return;
 		}
+		if (!liveThisSession)
+		{
+			// Nothing has been seen in game yet this session: an empty state must not replace the saved snapshot
+			log.debug("Sync skipped: not logged in yet this session");
+			return;
+		}
 
 		try
 		{
@@ -480,11 +624,16 @@ public class CompanionPlugin extends Plugin
 			// 1. Publish to the local server, wrapped in the same envelope the Worker returns
 			if (config.enableLocalServer() && localStateServer != null && localStateServer.isRunning())
 			{
-				Map<String, Object> envelope = new HashMap<>();
-				envelope.put("data", state);
-				envelope.put("updated_at", System.currentTimeMillis());
-				String envelopeJson = gson.toJson(envelope);
-				localStateServer.publish(envelopeJson);
+				synchronized (publishLock)
+				{
+					localStateServer.publish(envelopeJson(state));
+				}
+			}
+
+			// 1b. Keep the last state on disk for the next RuneLite start
+			if (snapshotStore != null && profileKey != null)
+			{
+				snapshotStore.write(new SnapshotStore.Snapshot(profileKey, state));
 			}
 
 			// 2. Dispatch to BYOS outbound server if enabled
@@ -502,6 +651,8 @@ public class CompanionPlugin extends Plugin
 	private StateDTO buildCurrentState()
 	{
 		return StateDTO.builder()
+			.observedAt(observedAtMs)
+			.bankObservedAt(bankObservedAtMs)
 			.inventory(new ArrayList<>(currentInventory))
 			.bank(new ArrayList<>(currentBank))
 			.potionStorage(new ArrayList<>(currentPotionStorage))
@@ -556,6 +707,7 @@ public class CompanionPlugin extends Plugin
 			}
 		}
 		currentBank = items;
+		bankObservedAtMs = System.currentTimeMillis();
 		recordPrices(items);
 	}
 
@@ -728,6 +880,7 @@ public class CompanionPlugin extends Plugin
 		if (!potions.isEmpty())
 		{
 			currentPotionStorage = potions;
+			bankObservedAtMs = System.currentTimeMillis();
 			recordPrices(potions);
 		}
 	}
@@ -739,6 +892,8 @@ public class CompanionPlugin extends Plugin
 			return;
 		}
 
+		liveThisSession = true;
+		observedAtMs = System.currentTimeMillis();
 		updateInventory(client.getItemContainer(InventoryID.INV));
 		ItemContainer bank = client.getItemContainer(InventoryID.BANK);
 		if (bank != null)
@@ -886,9 +1041,87 @@ public class CompanionPlugin extends Plugin
 		}
 	}
 
+	/** The wrapper both servers use: {@code data} plus {@code updated_at} (ms, when it was served). */
+	private String envelopeJson(StateDTO state)
+	{
+		Map<String, Object> envelope = new HashMap<>();
+		envelope.put("data", state);
+		envelope.put("updated_at", System.currentTimeMillis());
+		return gson.toJson(envelope);
+	}
+
+	/** Executor thread. Reads the previous session's snapshot, then serves it until the game is seen live. */
+	private void loadPersisted()
+	{
+		SnapshotStore.Snapshot snapshot = snapshotStore == null ? null : snapshotStore.read();
+		if (snapshot == null)
+		{
+			return;
+		}
+		persisted = snapshot;
+		servePersistedIfIdle();
+	}
+
+	/** Gives the phone the last session's final state when RuneLite has started but nobody has logged in yet. */
+	private void servePersistedIfIdle()
+	{
+		SnapshotStore.Snapshot snapshot = persisted;
+		if (snapshot == null || config == null || !config.enableSync() || !config.enableLocalServer()
+			|| localStateServer == null || !localStateServer.isRunning())
+		{
+			return;
+		}
+		synchronized (publishLock)
+		{
+			if (!liveThisSession)
+			{
+				localStateServer.publish(envelopeJson(snapshot.getData()));
+			}
+		}
+	}
+
+	/** The state to save, or null when there is nothing worth saving (sync off, never logged in, profile unknown). */
+	private SnapshotStore.Snapshot currentSnapshot()
+	{
+		if (snapshotStore == null || config == null || !config.enableSync() || !liveThisSession
+			|| profileKey == null || priceBook == null)
+		{
+			return null;
+		}
+		return new SnapshotStore.Snapshot(profileKey, buildCurrentState());
+	}
+
+	/** Saves the state as it is right now, on the executor (plugin shutdown must not wait on the disk). */
+	private void flushSnapshot()
+	{
+		SnapshotStore.Snapshot snapshot = currentSnapshot();
+		if (snapshot != null)
+		{
+			executor.execute(() -> snapshotStore.write(snapshot));
+		}
+	}
+
+	/** A small gold "P" for the sidebar button, drawn here so the plugin ships no image file. */
+	private static BufferedImage panelIcon()
+	{
+		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = image.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+		g.setColor(new Color(0xC8A24A));
+		g.fillRoundRect(0, 0, 16, 16, 5, 5);
+		g.setColor(new Color(0x2B2118));
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+		g.drawString("P", 4, 13);
+		g.dispose();
+		return image;
+	}
+
 	private void publishState()
 	{
-		// Serialization happens once in syncState(); serializing here ran on every container/varbit event
+		// Serialization happens once in syncState(); serializing here ran on every container/varbit event.
+		// Every caller is a game event, so this is the moment the snapshot was last true in game.
+		observedAtMs = System.currentTimeMillis();
 		triggerDebouncedSync();
 	}
 }
