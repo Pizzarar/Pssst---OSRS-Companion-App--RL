@@ -16,6 +16,8 @@ final class DeliveryPolicy
 {
 	static final long MIN_SEND_INTERVAL_MS = 120_000L;
 	static final long RETRY_INTERVAL_MS = 30_000L;
+	/** While item icons are waiting to go out, the next send may follow this soon after the last. */
+	static final long ICON_CATCH_UP_INTERVAL_MS = 15_000L;
 
 	enum State
 	{
@@ -47,16 +49,27 @@ final class DeliveryPolicy
 		this.clock = clock;
 	}
 
-	/** @return true when a snapshot observed at {@code observedAt} should be sent now (and marks a send in flight) */
 	synchronized boolean shouldSend(long observedAt)
 	{
+		return shouldSend(observedAt, false);
+	}
+
+	/**
+	 * @param hasExtras item icons are waiting to go out: they justify a send even if the game state hasn't changed,
+	 *                  and a shorter wait after the last one
+	 * @return true when a snapshot observed at {@code observedAt} should be sent now (and marks a send in flight)
+	 */
+	synchronized boolean shouldSend(long observedAt, boolean hasExtras)
+	{
 		long now = clock.getAsLong();
-		if (inFlight || state == State.REJECTED || observedAt <= 0 || observedAt <= deliveredObservedAt || now < notBefore)
+		boolean newer = observedAt > deliveredObservedAt;
+		if (inFlight || state == State.REJECTED || observedAt <= 0 || !(newer || hasExtras) || now < notBefore)
 		{
 			return false;
 		}
+		long wait = hasExtras ? ICON_CATCH_UP_INTERVAL_MS : MIN_SEND_INTERVAL_MS;
 		boolean paced = state == State.WAITING || flush || lastSuccessfulSendAt == Long.MIN_VALUE
-			|| now - lastSuccessfulSendAt >= MIN_SEND_INTERVAL_MS;
+			|| now - lastSuccessfulSendAt >= wait;
 		if (!paced)
 		{
 			return false;

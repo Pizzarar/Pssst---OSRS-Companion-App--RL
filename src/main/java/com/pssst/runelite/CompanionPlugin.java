@@ -206,6 +206,7 @@ public class CompanionPlugin extends Plugin
 	private volatile String phoneAddressProblem;
 
 	private final DeliveryPolicy phonePolicy = new DeliveryPolicy(System::currentTimeMillis);
+	private IconBook iconBook;
 	private ScheduledFuture<?> deliveryTask;
 
 	private SnapshotStore snapshotStore;
@@ -248,6 +249,20 @@ public class CompanionPlugin extends Plugin
 		}
 
 		priceBook = new PriceBook(itemManager::getItemPrice);
+		iconBook = new IconBook(new IconBook.Source()
+		{
+			@Override
+			public void request(int id, Runnable onLoaded)
+			{
+				itemManager.getImage(id).onLoaded(onLoaded);
+			}
+
+			@Override
+			public StateDTO.IconEntry encode(int id)
+			{
+				return IconEncoder.encode(itemManager.getItemComposition(id).getName(), itemManager.getImage(id));
+			}
+		});
 
 		ObservationStore observationStore = new ObservationStore()
 		{
@@ -320,6 +335,10 @@ public class CompanionPlugin extends Plugin
 			pairingPanel.dispose();
 			pairingPanel = null;
 		}
+		if (iconBook != null)
+		{
+			iconBook.clear();
+		}
 		liveThisSession = false;
 		persisted = null;
 		profileKey = null;
@@ -373,6 +392,7 @@ public class CompanionPlugin extends Plugin
 	{
 		resolveProfile();
 		observeLocationBoundState();
+		iconBook.process();
 
 		tickCounter++;
 		if (tickCounter >= HEARTBEAT_TICKS)
@@ -1124,7 +1144,7 @@ public class CompanionPlugin extends Plugin
 		List<CompletableFuture<Void>> sends)
 	{
 		long observedAt = state.getObservedAt();
-		if (!policy.shouldSend(observedAt))
+		if (!policy.shouldSend(observedAt, iconBook.hasReady()))
 		{
 			return;
 		}
@@ -1139,11 +1159,19 @@ public class CompanionPlugin extends Plugin
 		HttpUrl url = target.url;
 		CompletableFuture<Void> done = new CompletableFuture<>();
 		sends.add(done);
-		networkDispatcher.post(url, token, gson.toJson(payload(state)), outcome ->
+		Map<Integer, StateDTO.IconEntry> icons = iconBook.takeReady(IconBook.MAX_PER_PAYLOAD);
+		StateDTO body = payload(state);
+		if (!icons.isEmpty())
+		{
+			body = body.toBuilder().icons(icons).build();
+		}
+		networkDispatcher.post(url, token, gson.toJson(body), outcome ->
 		{
 			policy.onOutcome(outcome, observedAt);
 			if (outcome.kind == NetworkDispatcher.Outcome.Kind.DELIVERED)
 			{
+				iconBook.markSent(icons.keySet());
+				iconBook.want(outcome.needIcons);
 				executor.execute(this::saveDeliveryMarks);
 			}
 			if (pairingPanel != null)

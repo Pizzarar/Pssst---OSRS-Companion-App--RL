@@ -1,6 +1,12 @@
 package com.pssst.runelite;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import javax.inject.Inject;
@@ -50,20 +56,30 @@ public class NetworkDispatcher
 		final Kind kind;
 		final long pauseMs;
 		final int code;
+		/** Item ids the phone has no icon for (from its reply); empty unless delivered. */
+		final List<Integer> needIcons;
 
 		Outcome(Kind kind, long pauseMs, int code)
+		{
+			this(kind, pauseMs, code, Collections.emptyList());
+		}
+
+		Outcome(Kind kind, long pauseMs, int code, List<Integer> needIcons)
 		{
 			this.kind = kind;
 			this.pauseMs = pauseMs;
 			this.code = code;
+			this.needIcons = needIcons;
 		}
 	}
 
 	private final OkHttpClient okHttpClient;
+	private final Gson gson;
 
 	@Inject
-	public NetworkDispatcher(OkHttpClient okHttpClient)
+	public NetworkDispatcher(OkHttpClient okHttpClient, Gson gson)
 	{
+		this.gson = gson;
 		// Derived from RuneLite's client (shares its pool and dispatcher), only to fail fast when the phone isn't listening
 		this.okHttpClient = okHttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS).build();
 	}
@@ -92,7 +108,12 @@ public class NetworkDispatcher
 			{
 				try
 				{
-					done.accept(classify(response.code(), response.header("Retry-After")));
+					Outcome outcome = classify(response.code(), response.header("Retry-After"));
+					if (outcome.kind == Outcome.Kind.DELIVERED)
+					{
+						outcome = new Outcome(outcome.kind, 0, outcome.code, needIcons(response));
+					}
+					done.accept(outcome);
 				}
 				finally
 				{
@@ -100,6 +121,33 @@ public class NetworkDispatcher
 				}
 			}
 		});
+	}
+
+	/** The ids in the phone's reply, {"ok":true,"needIcons":[...]}; empty if there is none or it is unreadable. */
+	private List<Integer> needIcons(Response response)
+	{
+		try
+		{
+			String body = response.peekBody(64 * 1024).string();
+			JsonObject reply = gson.fromJson(body, JsonObject.class);
+			if (reply == null || !reply.has("needIcons") || !reply.get("needIcons").isJsonArray())
+			{
+				return Collections.emptyList();
+			}
+			List<Integer> ids = new ArrayList<>();
+			for (JsonElement id : reply.getAsJsonArray("needIcons"))
+			{
+				if (id.isJsonPrimitive() && id.getAsJsonPrimitive().isNumber())
+				{
+					ids.add(id.getAsInt());
+				}
+			}
+			return ids;
+		}
+		catch (IOException | RuntimeException e)
+		{
+			return Collections.emptyList();
+		}
 	}
 
 	static Outcome classify(int code, String retryAfter)

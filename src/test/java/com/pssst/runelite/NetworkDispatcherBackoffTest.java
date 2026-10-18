@@ -51,12 +51,40 @@ public class NetworkDispatcherBackoffTest
 		}).build();
 		CompletableFuture<NetworkDispatcher.Outcome> outcome = new CompletableFuture<>();
 
-		new NetworkDispatcher(client).post(PHONE, " 0123456789abcdef ", "{\"observedAt\":1}", outcome::complete);
+		new NetworkDispatcher(client, new com.google.gson.Gson()).post(PHONE, " 0123456789abcdef ", "{\"observedAt\":1}", outcome::complete);
 
 		Assert.assertEquals(NetworkDispatcher.Outcome.Kind.DELIVERED, outcome.get(5, TimeUnit.SECONDS).kind);
 		Assert.assertEquals("POST", seen.get().method());
 		Assert.assertEquals("Bearer 0123456789abcdef", seen.get().header("Authorization"));
 		Assert.assertNull("the token never goes in the URL", seen.get().url().query());
+	}
+
+	@Test
+	public void theReplyListsTheIconsThePhoneIsMissing() throws Exception
+	{
+		OkHttpClient client = new OkHttpClient.Builder().addInterceptor(chain ->
+			new Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("ok")
+				.body(ResponseBody.create(MediaType.parse("application/json"), "{\"ok\":true,\"needIcons\":[5952,2446,\"x\"]}")).build()).build();
+		CompletableFuture<NetworkDispatcher.Outcome> outcome = new CompletableFuture<>();
+
+		new NetworkDispatcher(client, new com.google.gson.Gson()).post(PHONE, "0123456789abcdef", "{}", outcome::complete);
+
+		Assert.assertEquals(java.util.Arrays.asList(5952, 2446), outcome.get(5, TimeUnit.SECONDS).needIcons);
+	}
+
+	@Test
+	public void aReplyThatIsNotJsonJustMeansNoIcons() throws Exception
+	{
+		OkHttpClient client = new OkHttpClient.Builder().addInterceptor(chain ->
+			new Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("ok")
+				.body(ResponseBody.create(MediaType.parse("text/plain"), "fine")).build()).build();
+		CompletableFuture<NetworkDispatcher.Outcome> outcome = new CompletableFuture<>();
+
+		new NetworkDispatcher(client, new com.google.gson.Gson()).post(PHONE, "0123456789abcdef", "{}", outcome::complete);
+
+		NetworkDispatcher.Outcome result = outcome.get(5, TimeUnit.SECONDS);
+		Assert.assertEquals(NetworkDispatcher.Outcome.Kind.DELIVERED, result.kind);
+		Assert.assertTrue(result.needIcons.isEmpty());
 	}
 
 	@Test
@@ -68,7 +96,7 @@ public class NetworkDispatcherBackoffTest
 		}).build();
 		CompletableFuture<NetworkDispatcher.Outcome> outcome = new CompletableFuture<>();
 
-		new NetworkDispatcher(client).post(PHONE, "0123456789abcdef", "{}", outcome::complete);
+		new NetworkDispatcher(client, new com.google.gson.Gson()).post(PHONE, "0123456789abcdef", "{}", outcome::complete);
 
 		Assert.assertEquals(NetworkDispatcher.Outcome.Kind.UNREACHABLE, outcome.get(5, TimeUnit.SECONDS).kind);
 	}

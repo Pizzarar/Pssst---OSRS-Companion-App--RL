@@ -91,6 +91,17 @@ public class DeliveryPolicyTest
 	}
 
 	@Test
+	public void waitingIconsJustifyASendEvenWithNothingNewAndASoonerOne()
+	{
+		delivered(500);
+		now.addAndGet(5_000);
+		Assert.assertFalse("nothing new and no icons", policy.shouldSend(500, false));
+		Assert.assertFalse("icons, but only 5 s after the last send", policy.shouldSend(500, true));
+		now.addAndGet(10_000);
+		Assert.assertTrue("icons 15 s after the last send, though the game state is the same", policy.shouldSend(500, true));
+	}
+
+	@Test
 	public void onlyOneSendIsInFlight()
 	{
 		Assert.assertTrue(policy.shouldSend(500));

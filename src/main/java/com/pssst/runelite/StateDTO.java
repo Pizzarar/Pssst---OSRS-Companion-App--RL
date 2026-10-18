@@ -33,6 +33,12 @@ public class StateDTO
 	@SerializedName("potion_storage")
 	private List<ItemEntry> potionStorage;
 
+	/**
+	 * Item icons the phone asked for (item id to name and PNG), drawn by this RuneLite client. Present only on the
+	 * sends that carry some; never saved to disk. See IconBook.
+	 */
+	private Map<Integer, IconEntry> icons;
+
 	private List<SkillEntry> skills;
 
 	@SerializedName("ge_offers")
@@ -118,6 +124,16 @@ public class StateDTO
 		private int stage;
 		private int stages;
 		private int tickMinutes;
+	}
+
+	/** One item icon: its name and a 36x32 PNG as base64. */
+	@Data
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class IconEntry
+	{
+		private String name;
+		private String png;
 	}
 
 	@Data
