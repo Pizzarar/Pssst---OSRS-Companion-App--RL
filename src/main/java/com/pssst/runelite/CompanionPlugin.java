@@ -1178,7 +1178,8 @@ public class CompanionPlugin extends Plugin
 
 	private String phoneStatusHtml()
 	{
-		return PairingPanel.describe(config.enableSync(), config.sendToPhone(),
+		String token = config.syncToken();
+		return PairingPanel.describe(config.enableSync(), token == null ? 0 : token.trim().length(), config.sendToPhone(),
 			config.sendToPhone() ? PhoneAddress.parse(config.phoneAddress()).problem : null,
 			phonePolicy.state(), latestState != null, phonePolicy.lastDeliveredAt(), System.currentTimeMillis());
 	}

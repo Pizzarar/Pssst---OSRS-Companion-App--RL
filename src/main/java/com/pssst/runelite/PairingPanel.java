@@ -104,9 +104,23 @@ class PairingPanel extends PluginPanel
 	static String describe(boolean enableSync, boolean sendToPhone, String addressProblem, DeliveryPolicy.State state,
 		boolean hasData, long lastDeliveredAt, long now)
 	{
+		return describe(enableSync, MIN_TOKEN_LENGTH, sendToPhone, addressProblem, state, hasData, lastDeliveredAt, now);
+	}
+
+	/** Shortest Sync Token accepted as safe (the plugin generates 32 characters; the Worker requires 16). */
+	static final int MIN_TOKEN_LENGTH = 16;
+
+	static String describe(boolean enableSync, int tokenLength, boolean sendToPhone, String addressProblem,
+		DeliveryPolicy.State state, boolean hasData, long lastDeliveredAt, long now)
+	{
 		if (!enableSync)
 		{
 			return html("Sync is off.", "Turn on <i>Enable Sync</i> in the Pssst Companion settings.");
+		}
+		if (tokenLength < MIN_TOKEN_LENGTH)
+		{
+			return html("The Sync Token is too short.", "Anyone on your network could guess it. Clear the "
+				+ "<i>Sync Token</i> field and turn the plugin off and on to get a new one, then copy it into the app.");
 		}
 		if (!sendToPhone)
 		{

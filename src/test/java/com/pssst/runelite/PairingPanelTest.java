@@ -24,6 +24,14 @@ public class PairingPanelTest
 	}
 
 	@Test
+	public void aShortHandTypedTokenIsFlagged()
+	{
+		String text = PairingPanel.describe(true, 3, true, null, DeliveryPolicy.State.DELIVERED, true, 0, NOW);
+		Assert.assertTrue(text, text.contains("too short"));
+		Assert.assertFalse(PairingPanel.describe(true, 32, true, null, DeliveryPolicy.State.DELIVERED, true, 0, NOW).contains("too short"));
+	}
+
+	@Test
 	public void deliveredShowsHowLongAgo()
 	{
 		String text = describe(true, true, null, DeliveryPolicy.State.DELIVERED, true, NOW - 5 * 60_000L);
