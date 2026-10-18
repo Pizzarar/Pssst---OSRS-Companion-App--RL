@@ -115,8 +115,14 @@ public class CompanionPluginComplianceTest
 		ConfigItem pushItem = CompanionConfig.class.getMethod("enableByosPush").getAnnotation(ConfigItem.class);
 		Assert.assertTrue("enableByosPush must warn about IP address submission",
 			pushItem.warning().toLowerCase().contains("ip address"));
-		ConfigItem loopbackItem = CompanionConfig.class.getMethod("bindLoopbackOnly").getAnnotation(ConfigItem.class);
-		Assert.assertFalse("bindLoopbackOnly must warn before exposing the server", loopbackItem.warning().isEmpty());
+		ConfigItem phoneItem = CompanionConfig.class.getMethod("sendToPhone").getAnnotation(ConfigItem.class);
+		Assert.assertTrue("sendToPhone must warn about IP address submission", phoneItem.warning().toLowerCase().contains("ip address"));
+		ConfigItem bankItem = CompanionConfig.class.getMethod("includeBank").getAnnotation(ConfigItem.class);
+		Assert.assertTrue("includeBank must say the bank leaves the PC", bankItem.warning().toLowerCase().contains("bank"));
+		for (String retired : CompanionConfig.RETIRED_KEYS)
+		{
+			Assert.assertFalse("the plugin no longer serves data: " + retired, hasConfigKey(retired));
+		}
 
 		// 2. Default values verification via default methods
 		CompanionConfig config = (CompanionConfig) Proxy.newProxyInstance(
@@ -132,9 +138,9 @@ public class CompanionPluginComplianceTest
 		);
 
 		Assert.assertFalse("Master sync must be opt-in (default false)", config.enableSync());
-		Assert.assertTrue("Local state server may default to on: it only runs once sync is enabled, and needs the token", config.enableLocalServer());
-		Assert.assertEquals("Default local port should be 8788", 8788, config.localServerPort());
-		Assert.assertTrue("bindLoopbackOnly must default to true (LAN exposure is opt-in)", config.bindLoopbackOnly());
+		Assert.assertFalse("Sending to the phone must be opt-in (default false)", config.sendToPhone());
+		Assert.assertEquals("no phone is assumed", "", config.phoneAddress());
+		Assert.assertTrue("the bank goes along once sending is on (its own toggle)", config.includeBank());
 		Assert.assertFalse("Pushing to a configured server must be opt-in (default false)", config.enableByosPush());
 		Assert.assertEquals("no server is assumed: the Server URL starts empty", "", config.serverUrl());
 
@@ -143,6 +149,19 @@ public class CompanionPluginComplianceTest
 		net.runelite.client.config.ConfigSection byos = byosField.getAnnotation(net.runelite.client.config.ConfigSection.class);
 		Assert.assertTrue("Advanced: Your Own Server starts collapsed", byos.closedByDefault());
 		Assert.assertEquals("Advanced: Your Own Server", byos.name());
+	}
+
+	private static boolean hasConfigKey(String key)
+	{
+		for (Method method : CompanionConfig.class.getMethods())
+		{
+			ConfigItem item = method.getAnnotation(ConfigItem.class);
+			if (item != null && item.keyName().equals(key))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Test

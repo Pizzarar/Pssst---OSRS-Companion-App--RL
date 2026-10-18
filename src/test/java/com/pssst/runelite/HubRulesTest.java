@@ -19,6 +19,9 @@ public class HubRulesTest
 	private static final Pattern[] FORBIDDEN = {
 		Pattern.compile("\\.interrupt\\("),
 		Pattern.compile("Thread\\.sleep"),
+		// The plugin only sends; it never listens ("Plugins which expose player information over HTTP" are rejected)
+		Pattern.compile("ServerSocket"),
+		Pattern.compile("HttpServer"),
 		Pattern.compile("java\\.io\\.File\\b"),
 		Pattern.compile("java\\.io\\.File(Reader|Writer|InputStream|OutputStream)\\b"),
 		Pattern.compile("java\\.nio\\.file\\.(Files|Paths)\\b"),

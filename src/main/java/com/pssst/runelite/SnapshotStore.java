@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -13,9 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.util.Filepath;
 
 /**
- * Keeps the last snapshot on disk so the local server can hand it to the phone the next time RuneLite starts, before
- * anyone logs in. One small JSON file in the plugin's own directory, written through RuneLite's Filepath (the Hub
- * forbids raw java.io file APIs). It never holds the Sync Token. Disk I/O only: callers run it off the client thread.
+ * Keeps the last snapshot on disk, with what each target has already received, so anything not yet delivered when
+ * RuneLite closed is sent the next time it runs (even before anyone logs in). One small JSON file in the plugin's own
+ * directory, written through RuneLite's Filepath (the Hub forbids raw java.io file APIs). It never holds the Sync Token. Disk I/O only: callers run it off the client thread.
  */
 @Slf4j
 class SnapshotStore
@@ -29,7 +31,11 @@ class SnapshotStore
 		Filepath get() throws IOException;
 	}
 
-	/** profileKey ties the snapshot to the RuneLite profile that produced it, so another account's bank is never carried over. */
+	/**
+	 * profileKey ties the snapshot to the RuneLite profile that produced it, so another account's bank is never carried
+	 * over. delivered maps each target ("phone", "server") to the observedAt it last confirmed, so data that was not
+	 * delivered before RuneLite closed is sent the next time.
+	 */
 	@Data
 	@NoArgsConstructor
 	@AllArgsConstructor
@@ -37,6 +43,18 @@ class SnapshotStore
 	{
 		private String profileKey;
 		private StateDTO data;
+		private Map<String, Long> delivered;
+
+		Snapshot(String profileKey, StateDTO data)
+		{
+			this(profileKey, data, new HashMap<>());
+		}
+
+		long deliveredTo(String target)
+		{
+			Long at = delivered == null ? null : delivered.get(target);
+			return at == null ? 0 : at;
+		}
 	}
 
 	private final Directory directory;

@@ -1,8 +1,8 @@
 package com.pssst.runelite;
 
-import com.google.gson.Gson;
 import java.io.IOException;
-import java.util.function.LongSupplier;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +15,11 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+/**
+ * Sends the snapshot to a target the player owns: the Pssst app on their phone, or their own server. Outbound only,
+ * asynchronous ({@code enqueue}) on RuneLite's injected client. The plugin never listens on a port. Whether and when to
+ * send is {@link DeliveryPolicy}'s decision; this class only performs one POST and reports how it went.
+ */
 @Slf4j
 @Singleton
 public class NetworkDispatcher
@@ -23,103 +28,53 @@ public class NetworkDispatcher
 
 	private static final long DEFAULT_BACKOFF_SECONDS = 60;
 	private static final long MAX_BACKOFF_SECONDS = 3600;
+	private static final int CONNECT_TIMEOUT_SECONDS = 3;
+
+	/** How one POST ended. */
+	static final class Outcome
+	{
+		enum Kind
+		{
+			/** 2xx: the target has the snapshot. */
+			DELIVERED,
+			/** No connection (refused, timed out, no route): the phone app is not listening right now. */
+			UNREACHABLE,
+			/** 401: the target does not accept this Sync Token. */
+			REJECTED,
+			/** 403 or 429: told to stop for {@link #pauseMs}. */
+			BACKOFF,
+			/** Any other answer. */
+			FAILED
+		}
+
+		final Kind kind;
+		final long pauseMs;
+		final int code;
+
+		Outcome(Kind kind, long pauseMs, int code)
+		{
+			this.kind = kind;
+			this.pauseMs = pauseMs;
+			this.code = code;
+		}
+	}
 
 	private final OkHttpClient okHttpClient;
-	private final Gson gson;
-	private final CompanionConfig config;
-	private final LongSupplier clockMs;
-
-	/** Pushes are skipped until this time after the server answered 429 or 403. */
-	private volatile long pausedUntilMs;
 
 	@Inject
-	public NetworkDispatcher(OkHttpClient okHttpClient, Gson gson, CompanionConfig config)
+	public NetworkDispatcher(OkHttpClient okHttpClient)
 	{
-		this(okHttpClient, gson, config, System::currentTimeMillis);
+		// Derived from RuneLite's client (shares its pool and dispatcher), only to fail fast when the phone isn't listening
+		this.okHttpClient = okHttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS).build();
 	}
 
-	NetworkDispatcher(OkHttpClient okHttpClient, Gson gson, CompanionConfig config, LongSupplier clockMs)
+	/** POSTs {@code json} to {@code url} with the token in the Authorization header; {@code done} runs on OkHttp's thread. */
+	void post(HttpUrl url, String syncToken, String json, Consumer<Outcome> done)
 	{
-		this.okHttpClient = okHttpClient;
-		this.gson = gson;
-		this.config = config;
-		this.clockMs = clockMs;
-	}
-
-	public NetworkDispatcher(OkHttpClient okHttpClient, Gson gson)
-	{
-		this(okHttpClient, gson, null);
-	}
-
-	public void dispatch(StateDTO state)
-	{
-		if (config == null || !config.enableSync() || !config.enableByosPush())
-		{
-			return;
-		}
-
-		dispatch(config.serverUrl(), config.syncToken(), true, state);
-	}
-
-	public void dispatch(String serverUrl, String syncToken, StateDTO state)
-	{
-		boolean enable = (config == null || (config.enableSync() && config.enableByosPush()));
-		dispatch(serverUrl, syncToken, enable, state);
-	}
-
-	public void dispatch(String serverUrl, String syncToken, boolean enableSync, StateDTO state)
-	{
-		if (!enableSync)
-		{
-			log.debug("Dispatch skipped: sync disabled");
-			return;
-		}
-
-		if (clockMs.getAsLong() < pausedUntilMs)
-		{
-			log.debug("Dispatch skipped: the server asked us to back off");
-			return;
-		}
-
-		if (serverUrl == null || serverUrl.trim().isEmpty())
-		{
-			log.warn("Dispatch skipped: serverUrl blank");
-			return;
-		}
-
-		if (syncToken == null || syncToken.trim().isEmpty())
-		{
-			log.warn("Dispatch skipped: syncToken blank");
-			return;
-		}
-
-		if (state == null)
-		{
-			log.warn("Dispatch skipped: state is null");
-			return;
-		}
-
-		if (okHttpClient == null || gson == null)
-		{
-			log.warn("Dispatch skipped: okHttpClient or gson is null");
-			return;
-		}
-
-		HttpUrl finalUrl = normalizeServerUrl(serverUrl);
-		if (finalUrl == null)
-		{
-			log.warn("Dispatch skipped: invalid URL or host: {}", serverUrl);
-			return;
-		}
-
-		String json = gson.toJson(state);
-		final int jsonLength = json.length();
-		RequestBody body = RequestBody.create(JSON, json);
-
 		Request request = new Request.Builder()
-			.url(finalUrl)
+			.url(url)
 			.header("Authorization", "Bearer " + syncToken.trim())
-			.post(body)
+			.post(RequestBody.create(JSON, json))
 			.build();
 
 		okHttpClient.newCall(request).enqueue(new Callback()
@@ -127,7 +82,9 @@ public class NetworkDispatcher
 			@Override
 			public void onFailure(Call call, IOException e)
 			{
-				log.warn("POST {} failed: {}", finalUrl, e.toString());
+				// Normal whenever the app is closed or the phone is away: not worth more than a debug line
+				log.debug("POST {} not delivered: {}", url.host(), e.getClass().getSimpleName());
+				done.accept(new Outcome(Outcome.Kind.UNREACHABLE, 0, 0));
 			}
 
 			@Override
@@ -135,21 +92,7 @@ public class NetworkDispatcher
 			{
 				try
 				{
-					if (response.code() == 429 || response.code() == 403)
-					{
-						// Told to stop: no retrying around it. The next push after the pause is the only retry.
-						long pauseMs = backoffMillis(response.header("Retry-After"));
-						pausedUntilMs = clockMs.getAsLong() + pauseMs;
-						log.warn("POST {} -> HTTP {}; pausing pushes for {} s", finalUrl, response.code(), pauseMs / 1000);
-					}
-					else if (!response.isSuccessful())
-					{
-						log.warn("POST {} -> HTTP {}", finalUrl, response.code());
-					}
-					else
-					{
-						log.info("POST {} -> HTTP {} ({} bytes)", finalUrl, response.code(), jsonLength);
-					}
+					done.accept(classify(response.code(), response.header("Retry-After")));
 				}
 				finally
 				{
@@ -157,6 +100,28 @@ public class NetworkDispatcher
 				}
 			}
 		});
+	}
+
+	static Outcome classify(int code, String retryAfter)
+	{
+		if (code >= 200 && code < 300)
+		{
+			return new Outcome(Outcome.Kind.DELIVERED, 0, code);
+		}
+		if (code == 401)
+		{
+			log.warn("Pssst target rejected the Sync Token (401)");
+			return new Outcome(Outcome.Kind.REJECTED, 0, code);
+		}
+		if (code == 403 || code == 429)
+		{
+			// Told to stop: no retrying around it
+			long pause = backoffMillis(retryAfter);
+			log.warn("Pssst target answered HTTP {}; pausing sends for {} s", code, pause / 1000);
+			return new Outcome(Outcome.Kind.BACKOFF, pause, code);
+		}
+		log.warn("Pssst target answered HTTP {}", code);
+		return new Outcome(Outcome.Kind.FAILED, 0, code);
 	}
 
 	/** Retry-After in seconds (default 60 s, at most an hour); the HTTP-date form is treated as unparsable. */
@@ -178,9 +143,8 @@ public class NetworkDispatcher
 	}
 
 	/**
-	 * Normalizes user input into a valid HTTP/HTTPS endpoint.
-	 * Automatically accepts bare IPs (e.g., 100.64.0.1:8787), strips trailing slashes,
-	 * and appends /sync if not already present.
+	 * Normalizes a server address the player typed into an HTTP/HTTPS endpoint: accepts bare IPs (e.g. 100.64.0.1:8787),
+	 * strips trailing slashes, and appends /sync if not already present.
 	 */
 	public static HttpUrl normalizeServerUrl(String serverUrl)
 	{
@@ -213,7 +177,6 @@ public class NetworkDispatcher
 
 		if ("0.0.0.0".equals(parsed.host()))
 		{
-			log.info("serverUrl uses 0.0.0.0 bind address; rewriting to 127.0.0.1 for outbound dispatch");
 			parsed = parsed.newBuilder().host("127.0.0.1").build();
 		}
 

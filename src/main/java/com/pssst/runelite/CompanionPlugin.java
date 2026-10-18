@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -62,6 +63,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import okhttp3.HttpUrl;
 
 @Slf4j
 @PluginDescriptor(
@@ -75,6 +77,9 @@ public class CompanionPlugin extends Plugin
 {
 	private static final String CONFIG_GROUP = "pssstcompanion";
 	private static final int DEBOUNCE_DELAY_SECONDS = 2;
+	private static final int DELIVERY_TICK_SECONDS = 5;
+	private static final String TARGET_PHONE = "phone";
+	private static final String TARGET_SERVER = "server";
 	private static final int HEARTBEAT_TICKS = 1500; // 15 minutes = 1500 ticks @ 600ms/tick
 
 	// Potion storage: the same named enums, scripts and widget RuneLite's PotionStorage reads, not bare numbers
@@ -165,9 +170,6 @@ public class CompanionPlugin extends Plugin
 	private NetworkDispatcher networkDispatcher;
 
 	@Inject
-	private LocalStateServer localStateServer;
-
-	@Inject
 	private ScheduledExecutorService executor;
 
 	@Inject
@@ -191,13 +193,21 @@ public class CompanionPlugin extends Plugin
 	private volatile long observedAtMs;
 	// When the bank / potion storage were last read from the open bank, or carried over from the saved snapshot
 	private volatile long bankObservedAtMs;
-	// True once this RuneLite session has seen the logged-in game. Until then the saved snapshot is what gets served.
+	// True once this RuneLite session has seen the logged-in game. Until then the saved snapshot is what gets sent.
 	private volatile boolean liveThisSession;
 	// The RS profile the live state belongs to; written on the client thread, read when saving
 	private volatile String profileKey;
 	// The previous session's snapshot, loaded off-thread at startup; consumed once the profile is known
 	private volatile SnapshotStore.Snapshot persisted;
-	private final Object publishLock = new Object();
+	// What gets delivered: the live state once logged in, the saved snapshot before that. Profile of whoever produced it.
+	private volatile StateDTO latestState;
+	private volatile String latestProfileKey;
+	// Why the Phone Address cannot be used, or null
+	private volatile String phoneAddressProblem;
+
+	private final DeliveryPolicy phonePolicy = new DeliveryPolicy(System::currentTimeMillis);
+	private final DeliveryPolicy serverPolicy = new DeliveryPolicy(System::currentTimeMillis);
+	private ScheduledFuture<?> deliveryTask;
 
 	private SnapshotStore snapshotStore;
 	private PairingPanel pairingPanel;
@@ -259,10 +269,18 @@ public class CompanionPlugin extends Plugin
 		farmingTracker = new FarmingTracker(client::getVarbitValue, observationStore, System::currentTimeMillis);
 		birdhouseTracker = new BirdhouseTracker(client::getVarpValue, observationStore, System::currentTimeMillis);
 
+		for (String key : CompanionConfig.RETIRED_KEYS)
+		{
+			// Local Server settings from older versions: the plugin no longer listens on a port
+			configManager.unsetConfiguration(CONFIG_GROUP, key);
+		}
+
 		snapshotStore = new SnapshotStore(this::getPluginDirectory, gson);
 		executor.execute(this::loadPersisted); // disk read: not here, and never on the client thread
+		// Cheap check every few seconds; DeliveryPolicy decides whether anything is actually sent
+		deliveryTask = executor.scheduleWithFixedDelay(this::deliveryTick, DELIVERY_TICK_SECONDS, DELIVERY_TICK_SECONDS, TimeUnit.SECONDS);
 
-		pairingPanel = new PairingPanel(config, executor, () -> localStateServer != null && localStateServer.isRunning());
+		pairingPanel = new PairingPanel(config, this::phoneStatusHtml);
 		navigationButton = NavigationButton.builder()
 			.tooltip("Pssst Companion")
 			.icon(panelIcon())
@@ -270,8 +288,6 @@ public class CompanionPlugin extends Plugin
 			.panel(pairingPanel)
 			.build();
 		clientToolbar.addNavigation(navigationButton);
-
-		reconcileLocalServer();
 
 		log.info("Pssst Companion plugin started!");
 		clientThread.invokeLater(this::refreshAllClientState);
@@ -283,6 +299,11 @@ public class CompanionPlugin extends Plugin
 		if (debounceTask != null && !debounceTask.isDone())
 		{
 			debounceTask.cancel(false);
+		}
+		if (deliveryTask != null)
+		{
+			deliveryTask.cancel(false);
+			deliveryTask = null;
 		}
 		flushSnapshot();
 		if (navigationButton != null)
@@ -298,12 +319,10 @@ public class CompanionPlugin extends Plugin
 		liveThisSession = false;
 		persisted = null;
 		profileKey = null;
+		latestState = null;
+		latestProfileKey = null;
 		observedAtMs = 0;
 		bankObservedAtMs = 0;
-		if (localStateServer != null)
-		{
-			localStateServer.stop();
-		}
 		currentInventory = new ArrayList<>();
 		currentBank = new ArrayList<>();
 		currentPotionStorage = new ArrayList<>();
@@ -337,6 +356,13 @@ public class CompanionPlugin extends Plugin
 			tickCounter = 0;
 			clientThread.invokeLater(this::refreshAllClientState);
 		}
+		else if (event.getGameState() == GameState.LOGIN_SCREEN && liveThisSession)
+		{
+			// Logged out: send the final state now instead of waiting for the 2-minute pacing
+			phonePolicy.requestFlush();
+			serverPolicy.requestFlush();
+			executor.schedule(this::deliveryTick, DEBOUNCE_DELAY_SECONDS + 1, TimeUnit.SECONDS);
+		}
 	}
 
 	@Subscribe
@@ -361,11 +387,20 @@ public class CompanionPlugin extends Plugin
 	@Subscribe
 	public void onClientShutdown(ClientShutdown event)
 	{
-		// RuneLite is closing: make sure the last state reaches the disk before the JVM exits
+		// RuneLite is closing: the last state goes to disk, and to the phone if it is listening
 		SnapshotStore.Snapshot snapshot = currentSnapshot();
-		if (snapshot != null)
+		if (snapshot == null)
 		{
-			event.waitFor(executor.submit(() -> snapshotStore.write(snapshot)));
+			return;
+		}
+		latestState = snapshot.getData();
+		latestProfileKey = snapshot.getProfileKey();
+		event.waitFor(executor.submit(() -> snapshotStore.write(withMarks(snapshot))));
+		phonePolicy.requestFlush();
+		serverPolicy.requestFlush();
+		for (CompletableFuture<Void> sent : deliverAll())
+		{
+			event.waitFor(sent);
 		}
 	}
 
@@ -535,7 +570,15 @@ public class CompanionPlugin extends Plugin
 	{
 		if ("pssstcompanion".equals(event.getGroup()))
 		{
-			reconcileLocalServer();
+			String key = event.getKey();
+			if ("syncToken".equals(key) || "sendToPhone".equals(key) || "phoneAddress".equals(key) || "includeBank".equals(key))
+			{
+				phonePolicy.reset();
+			}
+			if ("syncToken".equals(key) || "enableByosPush".equals(key) || "serverUrl".equals(key) || "includeBank".equals(key))
+			{
+				serverPolicy.reset();
+			}
 			if (pairingPanel != null)
 			{
 				pairingPanel.refresh();
@@ -552,28 +595,10 @@ public class CompanionPlugin extends Plugin
 					executor.execute(snapshotStore::delete);
 				}
 			}
-			else if ("enableLocalServer".equals(event.getKey()) || "enableByosPush".equals(event.getKey()))
+			else if ("sendToPhone".equals(event.getKey()) || "enableByosPush".equals(event.getKey()))
 			{
 				triggerDebouncedSync();
 			}
-		}
-	}
-
-	private void reconcileLocalServer()
-	{
-		if (localStateServer == null)
-		{
-			return;
-		}
-
-		if (config != null && config.enableSync() && config.enableLocalServer())
-		{
-			localStateServer.start(config.localServerPort(), config.bindLoopbackOnly(), config.syncToken());
-			executor.execute(this::servePersistedIfIdle);
-		}
-		else
-		{
-			localStateServer.stop();
 		}
 	}
 
@@ -621,25 +646,17 @@ public class CompanionPlugin extends Plugin
 				state.getGeOffers() != null ? state.getGeOffers().size() : 0,
 				state.getVarbits() != null ? state.getVarbits().size() : 0);
 
-			// 1. Publish to the local server, wrapped in the same envelope the Worker returns
-			if (config.enableLocalServer() && localStateServer != null && localStateServer.isRunning())
+			// This is what the delivery loop sends (to the phone, and to your own server if set)
+			latestState = state;
+			if (profileKey != null)
 			{
-				synchronized (publishLock)
-				{
-					localStateServer.publish(envelopeJson(state));
-				}
+				latestProfileKey = profileKey;
 			}
 
-			// 1b. Keep the last state on disk for the next RuneLite start
+			// Keep the last state on disk for the next RuneLite start, with what each target already has
 			if (snapshotStore != null && profileKey != null)
 			{
-				snapshotStore.write(new SnapshotStore.Snapshot(profileKey, state));
-			}
-
-			// 2. Dispatch to BYOS outbound server if enabled
-			if (config.enableByosPush() && networkDispatcher != null)
-			{
-				networkDispatcher.dispatch(config.serverUrl(), config.syncToken(), true, state);
+				snapshotStore.write(withMarks(new SnapshotStore.Snapshot(profileKey, state)));
 			}
 		}
 		catch (Exception e)
@@ -1041,16 +1058,7 @@ public class CompanionPlugin extends Plugin
 		}
 	}
 
-	/** The wrapper both servers use: {@code data} plus {@code updated_at} (ms, when it was served). */
-	private String envelopeJson(StateDTO state)
-	{
-		Map<String, Object> envelope = new HashMap<>();
-		envelope.put("data", state);
-		envelope.put("updated_at", System.currentTimeMillis());
-		return gson.toJson(envelope);
-	}
-
-	/** Executor thread. Reads the previous session's snapshot, then serves it until the game is seen live. */
+	/** Executor thread. Reads the previous session's snapshot; until the game is seen live it is what gets delivered. */
 	private void loadPersisted()
 	{
 		SnapshotStore.Snapshot snapshot = snapshotStore == null ? null : snapshotStore.read();
@@ -1059,25 +1067,120 @@ public class CompanionPlugin extends Plugin
 			return;
 		}
 		persisted = snapshot;
-		servePersistedIfIdle();
+		phonePolicy.restoreDelivered(snapshot.deliveredTo(TARGET_PHONE));
+		serverPolicy.restoreDelivered(snapshot.deliveredTo(TARGET_SERVER));
+		if (!liveThisSession)
+		{
+			latestState = snapshot.getData();
+			latestProfileKey = snapshot.getProfileKey();
+		}
 	}
 
-	/** Gives the phone the last session's final state when RuneLite has started but nobody has logged in yet. */
-	private void servePersistedIfIdle()
+	/** Executor thread, every few seconds: hands the latest state to each enabled target its policy says is due. */
+	private void deliveryTick()
 	{
-		SnapshotStore.Snapshot snapshot = persisted;
-		if (snapshot == null || config == null || !config.enableSync() || !config.enableLocalServer()
-			|| localStateServer == null || !localStateServer.isRunning())
+		try
+		{
+			deliverAll();
+			if (pairingPanel != null)
+			{
+				pairingPanel.refresh();
+			}
+		}
+		catch (Exception e)
+		{
+			log.warn("Delivery check failed", e);
+		}
+	}
+
+	/** @return one future per send started now, completed when it finishes (used to hold RuneLite open on exit) */
+	private List<CompletableFuture<Void>> deliverAll()
+	{
+		List<CompletableFuture<Void>> sends = new ArrayList<>();
+		StateDTO state = latestState;
+		if (config == null || !config.enableSync() || state == null)
+		{
+			return sends;
+		}
+		String token = config.syncToken();
+		if (token == null || token.trim().isEmpty())
+		{
+			return sends;
+		}
+		if (config.sendToPhone())
+		{
+			PhoneAddress.Result address = PhoneAddress.parse(config.phoneAddress());
+			phoneAddressProblem = address.problem;
+			if (address.url != null)
+			{
+				deliver(phonePolicy, address.url, token, state, sends);
+			}
+		}
+		if (config.enableByosPush())
+		{
+			HttpUrl url = NetworkDispatcher.normalizeServerUrl(config.serverUrl());
+			if (url != null)
+			{
+				deliver(serverPolicy, url, token, state, sends);
+			}
+		}
+		return sends;
+	}
+
+	private void deliver(DeliveryPolicy policy, HttpUrl url, String token, StateDTO state, List<CompletableFuture<Void>> sends)
+	{
+		long observedAt = state.getObservedAt();
+		if (!policy.shouldSend(observedAt))
 		{
 			return;
 		}
-		synchronized (publishLock)
+		CompletableFuture<Void> done = new CompletableFuture<>();
+		sends.add(done);
+		networkDispatcher.post(url, token, gson.toJson(payload(state)), outcome ->
 		{
-			if (!liveThisSession)
+			policy.onOutcome(outcome, observedAt);
+			if (outcome.kind == NetworkDispatcher.Outcome.Kind.DELIVERED)
 			{
-				localStateServer.publish(envelopeJson(snapshot.getData()));
+				executor.execute(this::saveDeliveryMarks);
 			}
+			if (pairingPanel != null)
+			{
+				pairingPanel.refresh();
+			}
+			done.complete(null);
+		});
+	}
+
+	private StateDTO payload(StateDTO state)
+	{
+		return config.includeBank() ? state : PayloadFilter.withoutBank(state);
+	}
+
+	private SnapshotStore.Snapshot withMarks(SnapshotStore.Snapshot snapshot)
+	{
+		Map<String, Long> marks = new HashMap<>();
+		marks.put(TARGET_PHONE, phonePolicy.deliveredObservedAt());
+		marks.put(TARGET_SERVER, serverPolicy.deliveredObservedAt());
+		snapshot.setDelivered(marks);
+		return snapshot;
+	}
+
+	/** Executor thread: records on disk what was just delivered, so a restart doesn't send it again. */
+	private void saveDeliveryMarks()
+	{
+		StateDTO state = latestState;
+		String key = latestProfileKey;
+		if (snapshotStore != null && state != null && key != null && config != null && config.enableSync())
+		{
+			snapshotStore.write(withMarks(new SnapshotStore.Snapshot(key, state)));
 		}
+	}
+
+	private String phoneStatusHtml()
+	{
+		return PairingPanel.describe(config.enableSync(), config.sendToPhone(),
+			config.sendToPhone() ? PhoneAddress.parse(config.phoneAddress()).problem : null,
+			phonePolicy.state(), latestState != null, phonePolicy.lastDeliveredAt(), System.currentTimeMillis());
 	}
 
 	/** The state to save, or null when there is nothing worth saving (sync off, never logged in, profile unknown). */
@@ -1097,7 +1200,7 @@ public class CompanionPlugin extends Plugin
 		SnapshotStore.Snapshot snapshot = currentSnapshot();
 		if (snapshot != null)
 		{
-			executor.execute(() -> snapshotStore.write(snapshot));
+			executor.execute(() -> snapshotStore.write(withMarks(snapshot)));
 		}
 	}
 
