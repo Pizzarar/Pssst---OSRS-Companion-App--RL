@@ -90,9 +90,13 @@ public class CompanionPlugin extends Plugin
 	private static final int ENUM_POTIONSTORE_UNFINISHED = EnumID.POTIONSTORE_UNFINISHED_POTIONS;
 
 	static final Set<Integer> TRACKED_VARBITS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-		// Miscellania
+		// Miscellania & Coffers
 		VarbitID.MISC_APPROVAL,
 		VarbitID.MISC_COFFERS,
+		VarbitID.BLAST_FURNACE_COFFER,
+		VarbitID.NZONE_CASH,
+		VarbitID.POH_SERVANT_PAY,
+		VarbitID.BR_COFFER,
 
 		// Daily resets & weekly activities
 		VarbitID.ZAFF_LAST_CLAIMED,
@@ -258,7 +262,21 @@ public class CompanionPlugin extends Plugin
 			log.info("Generated a new sync token (shown in the plugin settings)");
 		}
 
-		priceBook = new PriceBook(itemManager::getItemPrice, id -> {
+		priceBook = new PriceBook(id -> {
+			try
+			{
+				if (id == 995)
+				{
+					return 1L;
+				}
+				ItemComposition comp = itemManager.getItemComposition(id);
+				return (comp != null && comp.isTradeable()) ? itemManager.getItemPrice(id) : 0L;
+			}
+			catch (Exception e)
+			{
+				return 0L;
+			}
+		}, id -> {
 			try
 			{
 				net.runelite.api.ItemComposition comp = itemManager.getItemComposition(id);
@@ -425,6 +443,10 @@ public class CompanionPlugin extends Plugin
 			tickCounter = 0;
 			// Prices drift; refresh them on the client thread (where ItemManager may be asked) before syncing
 			priceBook.record(heldIds());
+			if (currentSkills.isEmpty())
+			{
+				refreshAllSkills();
+			}
 			refreshQuests();
 			// Serializing and saving the whole state is not client-thread work: hand it to the executor
 			observedAtMs = System.currentTimeMillis();
@@ -482,6 +504,14 @@ public class CompanionPlugin extends Plugin
 		else
 		{
 			carryOver(BankCarry.from(snapshot, key));
+		}
+		if (currentSkills.isEmpty())
+		{
+			refreshAllSkills();
+		}
+		if (currentQuests.isEmpty())
+		{
+			refreshQuests();
 		}
 		publishState();
 	}
@@ -1276,7 +1306,8 @@ public class CompanionPlugin extends Plugin
 			}
 		}
 		return PairingPanel.describe(config.enableSync(), config.sendToPhone(), problem, phonePolicy.state(),
-			latestState != null, phonePolicy.lastDeliveredAt(), phonePolicy.waitingSince(), System.currentTimeMillis());
+			latestState != null, phonePolicy.lastDeliveredAt(), phonePolicy.waitingSince(), System.currentTimeMillis(),
+			config.phoneAddress());
 	}
 
 	/** The state to save, or null when there is nothing worth saving (sync off, never logged in, profile unknown). */

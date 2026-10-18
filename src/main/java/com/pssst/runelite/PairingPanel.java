@@ -186,6 +186,12 @@ class PairingPanel extends PluginPanel
 	static String describe(boolean enableSync, boolean sendToPhone, String addressProblem, DeliveryPolicy.State state,
 		boolean hasData, long lastDeliveredAt, long waitingSince, long now)
 	{
+		return describe(enableSync, sendToPhone, addressProblem, state, hasData, lastDeliveredAt, waitingSince, now, null);
+	}
+
+	static String describe(boolean enableSync, boolean sendToPhone, String addressProblem, DeliveryPolicy.State state,
+		boolean hasData, long lastDeliveredAt, long waitingSince, long now, String phoneAddress)
+	{
 		if (!enableSync)
 		{
 			return html("Sync is off.", "Turn on <i>Enable Sync</i> in the Pssst Companion settings.");
@@ -199,6 +205,11 @@ class PairingPanel extends PluginPanel
 			return html("Check the Phone Address.", addressProblem);
 		}
 		String last = lastDeliveredAt > 0 ? " Last delivered " + ago(now - lastDeliveredAt) + "." : "";
+		boolean isLoopback = phoneAddress != null && (phoneAddress.trim().startsWith("127.0.0.1")
+			|| phoneAddress.trim().toLowerCase().startsWith("localhost"));
+		String emulatorHint = isLoopback
+			? " Using the Android Emulator? Run: <code>adb forward tcp:8789 tcp:8789</code>."
+			: "";
 		switch (state)
 		{
 			case DELIVERED:
@@ -208,10 +219,10 @@ class PairingPanel extends PluginPanel
 				{
 					return html("Can't reach your phone (" + ago(now - waitingSince).replace(" ago", "") + ").",
 						"If the Pssst app is open on the same Wi-Fi, your phone's address may have changed: the app "
-							+ "shows the current one. Update Phone Address below." + last);
+							+ "shows the current one. Update Phone Address below." + emulatorHint + last);
 				}
 				return html("Waiting for your phone.", "The Pssst app isn't listening right now (closed, or not on the "
-					+ "same Wi-Fi). It will get the latest as soon as it is." + last);
+					+ "same Wi-Fi). It will get the latest as soon as it is." + emulatorHint + last);
 			case REJECTED:
 				return html("Your phone refused the Sync Token.", "Type the Sync Token below into the Pssst app again.");
 			case PAUSED:

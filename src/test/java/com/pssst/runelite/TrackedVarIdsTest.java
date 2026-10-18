@@ -17,6 +17,7 @@ public class TrackedVarIdsTest
 	{
 		Set<Integer> expected = new HashSet<>(Arrays.asList(
 			72, 74,                                       // Miscellania approval, coffer
+			5357, 3948, 2191, 5305,                       // Blast Furnace, NMZ, POH servant, LMS coffers
 			4539, 3961, 4547, 4540, 4549, 4559, 4563, 4543, 7939, // daily reset claims
 			5099, 456,                                    // Tears of Guthix
 			4479, 4480, 4481, 4482,                       // Varrock diary
