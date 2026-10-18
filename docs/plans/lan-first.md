@@ -1,5 +1,7 @@
 # Plan: LAN-first
 
+> **Superseded in part (2026-10-17) by `plans/phone-push.md`.** The Hub research ruled against the plugin serving data (a Local Server). Now the plugin *sends* to the Pssst app on the phone. The snapshot on disk, `observedAt`, the bank carry-over, reminders from cache and the game-state age all stay; the Local Server and its settings go. The table "What changes from LAN-first" in that plan lists each item.
+
 Status: shared work and the Branch A plugin/app items are built (see Implementation status); Hub PR, wiki and Branch B items are held. Written 2026-10-17. Covers all three repos (`PssstRunelite`, `PssstAndroid`, `PssstWorker`).
 
 ## 1. Summary

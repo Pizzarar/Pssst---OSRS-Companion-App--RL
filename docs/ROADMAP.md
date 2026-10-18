@@ -13,7 +13,7 @@ The full sequence (Hub packaging, the setup guide, the Google Play release, goin
 |---|---|---|
 | N1 | Verify the farming payment rows, then remove the "unverified" notice. Aub fills `checklists/farming-payments.md` | `plans/hub-submission.md` HS-2, HS-7 |
 | N2 | Tears of Guthix: code search first, then observe with `checklists/tears-of-guthix.md` | `plans/hub-submission.md` HS-3, HS-8 |
-| N3 | Hub answer on the Local Server: Aub researches with `research/hub-socket-gemini-prompt.md`, asks the maintainers if still unclear, then picks Branch A (LAN) or B (push) | `plans/lan-first.md` §2, `plans/hub-submission.md` HS-1 |
+| N3 | Phone push: the plugin sends to the Pssst app (no listening socket in the plugin), decided 2026-10-17 after the Hub research. 18 items (PP-1 to PP-9, AP-1 to AP-9) | `plans/phone-push.md` |
 | N4 | Fresh LAN-first guide for the GitHub Wiki (old drafts scrapped), privacy policy on GitHub Pages | `plans/hub-submission.md` HS-19 to HS-24 |
 | N5 | Real-phone same-Wi-Fi test (**pairing, sync and timers confirmed working 2026-10-17**), Windows Firewall prompt (which program, which network profile), reminder lateness under Doze (decides AN-4), PC shutdown mid-session, the setup-guide screenshots | Aub only (`plans/lan-first.md` §5) |
 

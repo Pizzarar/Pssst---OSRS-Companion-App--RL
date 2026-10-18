@@ -6,7 +6,7 @@ Status: planned 2026-10-17 from an interview with Aub. Nothing built yet. Follow
 | Topic | Decision |
 |---|---|
 | Focus | Hub submission prep: N1 (farming payments), N2 (Tears of Guthix), setup docs, packaging, ready to submit once the Hub question is answered |
-| Hub socket question | Aub researches with Gemini (prompt: `docs/research/hub-socket-gemini-prompt.md`) and brings the result back. It decides Branch A or B (`plans/lan-first.md` §2) |
+| Hub socket question | **Answered by research (2026-10-17):** a plugin serving data is very likely rejected; sending to your own device is accepted. Switched to `plans/phone-push.md` (the plugin sends to the app). HS-1 is done; HS-15 and HS-19 follow phone-push |
 | Android merge | Commit Aub's uncommitted design work first, then merge `claude/lan-first` on top |
 | Real device | Tested by Aub: pairing, sync and timers work on a real phone over Wi-Fi |
 | Farming payments | Aub checks the Wiki pages by hand with `docs/checklists/farming-payments.md`; the code follows the filled checklist; unconfirmed rows are deleted |
