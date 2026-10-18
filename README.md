@@ -6,16 +6,17 @@ Free, read-only and observational: it never sends input to the game, never tells
 
 ## Setup
 
-Install Pssst Companion, turn on **Enable Sync**, copy the **Sync Token**, and pair the Pssst app with your PC over your home Wi-Fi (or Tailscale, which works the same way with a different address). The **Pssst** panel in the RuneLite side bar shows the address and the Sync Token to type into the app. Step-by-step instructions: [docs/setup.md](docs/setup.md).
+Install Pssst Companion, turn on **Enable Sync**, and copy the **Sync Token** (also shown in the **Pssst** side panel) into the Pssst app on your phone. The app shows your phone's address: type it into **Phone Address** and turn on **Send to My Phone**. Step-by-step instructions: [docs/setup.md](docs/setup.md).
 
 ## Off by default
 
-Nothing leaves your PC until you turn on **Enable Sync**. The main way to get the data to your phone is the Local Server; sending to your own server is optional and tucked away under *Advanced: Your Own Server*:
+Nothing leaves your PC until you turn on **Enable Sync**. The plugin never opens a port on your PC; it only sends, to places you choose:
 
 | Feature | What it does | Default |
 |---|---|---|
-| Local Server | Serves your state at `GET /state` on your PC for the app to poll. Needs your Sync Token. Listens on `127.0.0.1` unless you turn off **This PC Only** (then devices on your home network or Tailscale can reach it, unencrypted, still needing the token; connections from any other address are closed). | on, once sync is enabled; this PC only |
-| Send to My Server (Advanced) | `POST`s the same state to the **Server URL** you enter (a server you run yourself, such as a Cloudflare Worker you deploy). Most players do not need it. | **off**; shows RuneLite's third-party IP warning |
+| Send to My Phone | `POST`s your state to the Pssst app at the **Phone Address** you enter (your phone on your home Wi-Fi, or its Tailscale address). Sends when something changed, at most every 2 minutes while you play, plus once when you log out. If the app isn't listening it tries again every 30 seconds until it lands. | **off**; RuneLite's third-party IP warning |
+| Include Bank | Also sends your bank and potion storage. | on, once sending is on; its own warning |
+| Send to My Server (Advanced) | `POST`s the same state to the **Server URL** you enter (a server you run yourself, such as a Cloudflare Worker you deploy). Most players do not need it. | **off**; RuneLite's third-party IP warning |
 
 ## What is sent
 
@@ -32,9 +33,9 @@ Not sent: your username, chat, location, friends, or anything about other player
 
 ## The last session is kept
 
-While sync is on, the plugin saves the latest snapshot to one small file in RuneLite's own folder for this plugin (`last-snapshot.json`; it never contains the Sync Token). When RuneLite starts, the Local Server serves it straight away, even before you log in, so the phone gets the final state of your last session. Turning **Enable Sync** off deletes the file. Every snapshot carries `observedAt`, the time the game last fed it, which is separate from the time it was served, so the app can say how old the game state is.
+While sync is on, the plugin saves the latest snapshot, and what your phone has already received, to one small file in RuneLite's own folder for this plugin (`last-snapshot.json`; it never contains the Sync Token). Anything your phone hadn't received when RuneLite closed is sent the next time RuneLite runs. Turning **Enable Sync** off deletes the file. Every snapshot carries `observedAt`, the time the game last fed it, so the app can say how old the game state is.
 
-If your PC shuts down before the phone has fetched the latest state, the phone shows the previous state until RuneLite is next open on the same Wi-Fi.
+Your phone gets new data while the Pssst app is open, or every so often in the background, whenever it can reach your PC. If your PC shuts down before that, the phone shows your previous state and timers until RuneLite and the app next meet.
 
 ## Sync token
 
@@ -42,8 +43,8 @@ On first run the plugin generates a random 128-bit **sync token** (shown in the 
 
 ## Network behaviour
 
-- Pushes use RuneLite's own HTTP client, asynchronously, only while the plugin is running and logged in.
-- The local server is a single-purpose plain-HTTP `GET /state` endpoint: header-only authentication, no CORS, no WebSocket, bounded request size and time, and only answers loopback, home-network and Tailscale addresses.
+- Sends use RuneLite's own HTTP client, asynchronously, only while the plugin is running. The plugin opens no port.
+- The Phone Address must be on your own network (home Wi-Fi ranges, Tailscale, or this PC); internet addresses are refused.
 - Farming and birdhouse timers are estimates: they follow RuneLite's Time Tracking logic and ignore the per-player farm tick offset, so they can be up to one growth tick early or late.
 
 ## Building

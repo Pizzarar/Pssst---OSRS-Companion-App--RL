@@ -1,6 +1,6 @@
 # Plan: the PC sends to the phone ("phone push")
 
-Status: planned 2026-10-17, nothing built. Replaces the Local Server direction of `plans/lan-first.md` (see "What changes from LAN-first"). Decided by Aub after the Hub research below.
+Status: **built 2026-10-17** (plugin 82 tests, app 94 tests); not yet tried on a real phone and PC. Old Local Server code removed. Replaces the Local Server direction of `plans/lan-first.md` (see "What changes from LAN-first"). Decided by Aub after the Hub research below.
 
 ## Why
 - **The Hub rule:** "Plugins which expose player information over HTTP" are rejected. The plugin's Local Server (the phone asks the PC) is exactly that. osrs-mcp, the closest match, was rejected in May 2026. No maintainer has approved a LAN server serving bank and inventory data.

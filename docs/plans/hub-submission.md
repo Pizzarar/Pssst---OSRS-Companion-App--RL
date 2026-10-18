@@ -62,7 +62,7 @@ Owner: **C** = Claude, **A** = Aub. Size S/M/L.
 | HS-12 | `icon.png` at the repo root, 48×72 max, optimized PNG (the side-panel "P" restyled) | C | S | — |
 | HS-13 | Hub-facing README pass: what it does, the opt-ins, the Local Server, the link to the Wiki guide and the Play listing, "not affiliated with Jagex or RuneLite" | C | S | HS-20 |
 | HS-14 | Final pre-PR check: `.\gradlew.bat build` green, `HubRulesTest` green, no build artifacts or `node_modules` tracked, `.gitignore` covers them, plugin descriptor text final | C | S | HS-9 to HS-13 |
-| HS-15 | Hub PR: plugin-hub `plugins/pssst-companion` file with `repository`, `commit` and the `warning=` from `lan-first.md` Appendix (Branch A), or Branch B items first (PL-11 and the rest) | C (A approves) | S | HS-1, HS-30 |
+| HS-15 | Hub PR: plugin-hub `plugins/pssst-companion` file with `repository`, `commit` and a `warning=` like: "When you turn on Send to My Phone, this plugin sends your skills, inventory, Grand Exchange offers, Slayer task, farming and birdhouse timers, and (with Include Bank) your bank to the Pssst app at the address you enter on your own network. Nothing goes to a Pssst server." | C (A approves) | S | HS-1, HS-30 |
 
 ### E. User guide and privacy (drafted in the repo, published when public)
 | ID | Item | Owner | Size | Depends |
