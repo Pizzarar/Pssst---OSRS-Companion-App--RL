@@ -32,7 +32,7 @@ Read `GUIDELINES.md` (this repo) before touching networking, prices, assets or g
 - Free. Read-only and observational. No "do X now" instructions and no AI gear advice.
 - Never hotlink or scrape the OSRS Wiki.
 - Any third-party network feature is off by default and carries RuneLite's `ConfigItem.warning` IP disclosure.
-- **The plugin never listens on a port** ("Plugins which expose player information over HTTP" are rejected). It only sends: `sendToPhone` ("Send to My Phone") and `enableByosPush` ("Send to My Server", collapsed under "Advanced: Your Own Server") are off by default with the IP warning; `includeBank` ("Include Bank") is its own toggle with its own warning. The token goes in the Authorization header only and is never logged. Old Local Server keys (`CompanionConfig.RETIRED_KEYS`) are unset on start-up.
+- **The plugin never listens on a port** ("Plugins which expose player information over HTTP" are rejected). It only sends, to the Pssst app on the phone: `sendToPhone` ("Send to My Phone") is off by default with the IP warning; `includeBank` ("Include Bank") is its own toggle with its own warning. The token goes in the Authorization header only and is never logged. Retired keys (Local Server, Send to My Server; `CompanionConfig.RETIRED_KEYS`) are unset on start-up. The side panel edits the Sync Token and Phone Address with explicit Save buttons; any token works, short ones get a note.
 
 ## Roadmap
 Open work and plans: `docs/ROADMAP.md` (index) and `docs/plans/`. The sync direction (the plugin sends to the phone) is `docs/plans/phone-push.md`; `docs/plans/lan-first.md` is partly superseded by it.

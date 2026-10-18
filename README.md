@@ -16,7 +16,6 @@ Nothing leaves your PC until you turn on **Enable Sync**. The plugin never opens
 |---|---|---|
 | Send to My Phone | `POST`s your state to the Pssst app at the **Phone Address** you enter (your phone on your home Wi-Fi, or its Tailscale address). Sends when something changed, at most every 2 minutes while you play, plus once when you log out. If the app isn't listening it tries again every 30 seconds until it lands. | **off**; RuneLite's third-party IP warning |
 | Include Bank | Also sends your bank and potion storage. | on, once sending is on; its own warning |
-| Send to My Server (Advanced) | `POST`s the same state to the **Server URL** you enter (a server you run yourself, such as a Cloudflare Worker you deploy). Most players do not need it. | **off**; RuneLite's third-party IP warning |
 
 ## What is sent
 
