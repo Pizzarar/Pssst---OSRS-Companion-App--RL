@@ -55,6 +55,12 @@ public class StateDTO
 	 */
 	private Map<Integer, Long> prices;
 
+	/**
+	 * High Alchemy price (gp) of each item held, straight from RuneLite's ItemManager / ItemComposition.
+	 */
+	@SerializedName(value = "haPrices", alternate = {"ha_prices"})
+	private Map<Integer, Long> haPrices;
+
 	/** Quest name to "NOT_STARTED" | "IN_PROGRESS" | "FINISHED", from the client; see QuestSnapshot. */
 	private Map<String, String> quests;
 
@@ -150,9 +156,19 @@ public class StateDTO
 		 */
 		private Integer baseId;
 
+		/**
+		 * Bank tab (1..9, 0 = main). Absent for non-bank containers like inventory or potion storage.
+		 */
+		private Integer tab;
+
 		public ItemEntry(int id, int quantity)
 		{
-			this(id, quantity, null);
+			this(id, quantity, null, null);
+		}
+
+		public ItemEntry(int id, int quantity, Integer baseId)
+		{
+			this(id, quantity, baseId, null);
 		}
 	}
 

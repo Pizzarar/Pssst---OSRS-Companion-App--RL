@@ -41,6 +41,17 @@ final class PayloadFilter
 				}
 			});
 		}
-		return state.toBuilder().bank(null).potionStorage(null).bankObservedAt(0).prices(prices).build();
+		Map<Integer, Long> haPrices = new HashMap<>();
+		if (state.getHaPrices() != null)
+		{
+			state.getHaPrices().forEach((id, price) ->
+			{
+				if (kept.contains(id))
+				{
+					haPrices.put(id, price);
+				}
+			});
+		}
+		return state.toBuilder().bank(null).potionStorage(null).bankObservedAt(0).prices(prices).haPrices(haPrices).build();
 	}
 }

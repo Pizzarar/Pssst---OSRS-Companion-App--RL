@@ -258,7 +258,17 @@ public class CompanionPlugin extends Plugin
 			log.info("Generated a new sync token (shown in the plugin settings)");
 		}
 
-		priceBook = new PriceBook(itemManager::getItemPrice);
+		priceBook = new PriceBook(itemManager::getItemPrice, id -> {
+			try
+			{
+				net.runelite.api.ItemComposition comp = itemManager.getItemComposition(id);
+				return comp != null ? (long) comp.getHaPrice() : 0L;
+			}
+			catch (Exception e)
+			{
+				return 0L;
+			}
+		});
 		iconBook = new IconBook(new IconBook.Source()
 		{
 			@Override
@@ -721,6 +731,7 @@ public class CompanionPlugin extends Plugin
 			.varbits(new HashMap<>(currentVarbits))
 			.varps(new HashMap<>(currentVarps))
 			.prices(priceBook.forHeld(heldIds()))
+			.haPrices(priceBook.haForHeld(heldIds()))
 			.slayer(currentSlayer)
 			.quests(currentQuests)
 			.farming(farmingTracker != null ? farmingTracker.snapshot() : new ArrayList<>())
@@ -758,12 +769,27 @@ public class CompanionPlugin extends Plugin
 			return;
 		}
 
+		Item[] rawItems = container.getItems();
+		int[] tabCounts = new int[]{
+			client.getVarbitValue(VarbitID.BANK_TAB_1),
+			client.getVarbitValue(VarbitID.BANK_TAB_2),
+			client.getVarbitValue(VarbitID.BANK_TAB_3),
+			client.getVarbitValue(VarbitID.BANK_TAB_4),
+			client.getVarbitValue(VarbitID.BANK_TAB_5),
+			client.getVarbitValue(VarbitID.BANK_TAB_6),
+			client.getVarbitValue(VarbitID.BANK_TAB_7),
+			client.getVarbitValue(VarbitID.BANK_TAB_8),
+			client.getVarbitValue(VarbitID.BANK_TAB_9)
+		};
+		int[] assignedTabs = BankTabs.assign(rawItems.length, tabCounts);
+
 		List<StateDTO.ItemEntry> items = new ArrayList<>();
-		for (Item item : container.getItems())
+		for (int i = 0; i < rawItems.length; i++)
 		{
+			Item item = rawItems[i];
 			if (item != null && item.getId() > 0 && item.getQuantity() > 0)
 			{
-				items.add(new StateDTO.ItemEntry(item.getId(), item.getQuantity()));
+				items.add(new StateDTO.ItemEntry(item.getId(), item.getQuantity(), null, assignedTabs[i]));
 			}
 		}
 		currentBank = items;

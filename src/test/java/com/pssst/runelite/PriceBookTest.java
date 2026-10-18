@@ -60,4 +60,15 @@ public class PriceBookTest
 		Assert.assertEquals(4151, ItemIds.pricingId(noted));
 		Assert.assertEquals(4151, ItemIds.pricingId(plain));
 	}
+
+	@Test
+	public void remembersHighAlchemyPrices()
+	{
+		Map<Integer, Long> haGame = new HashMap<>();
+		haGame.put(4151, 72_000L);
+		PriceBook book = new PriceBook(id -> game.getOrDefault(id, 0L), id -> haGame.getOrDefault(id, 0L));
+		book.record(Collections.singletonList(4151));
+
+		Assert.assertEquals(Collections.singletonMap(4151, 72_000L), book.haForHeld(Collections.singletonList(4151)));
+	}
 }
