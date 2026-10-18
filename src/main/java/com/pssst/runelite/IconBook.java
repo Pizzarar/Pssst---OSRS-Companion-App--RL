@@ -37,7 +37,7 @@ final class IconBook
 	private final ConcurrentLinkedQueue<Integer> wanted = new ConcurrentLinkedQueue<>();
 	private final Set<Integer> known = ConcurrentHashMap.newKeySet(); // wanted, loading, ready, sent or failed
 	private final ConcurrentLinkedQueue<Integer> loaded = new ConcurrentLinkedQueue<>();
-	private final Map<Integer, Integer> loading = new HashMap<>(); // client thread: id -> processes waited
+	private final Map<Integer, Integer> loading = new ConcurrentHashMap<>(); // client thread: id -> processes waited
 	private final Map<Integer, StateDTO.IconEntry> ready = new ConcurrentHashMap<>();
 
 	IconBook(Source source)
@@ -105,6 +105,11 @@ final class IconBook
 	boolean hasReady()
 	{
 		return !ready.isEmpty();
+	}
+
+	boolean hasPending()
+	{
+		return !wanted.isEmpty() || !loaded.isEmpty() || !loading.isEmpty();
 	}
 
 	/** Up to {@code max} finished icons to attach to the next payload (they stay ready until {@link #markSent}). */

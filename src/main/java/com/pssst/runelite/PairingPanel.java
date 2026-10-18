@@ -38,6 +38,7 @@ class PairingPanel extends PluginPanel
 	private final Supplier<String> statusHtml;
 	private final BiConsumer<String, String> setConfig;
 	private final Supplier<String> tokenGenerator;
+	private final Runnable sendNow;
 
 	private final JLabel status = new JLabel();
 	private final JTextField token = new JTextField();
@@ -51,10 +52,17 @@ class PairingPanel extends PluginPanel
 	PairingPanel(CompanionConfig config, Supplier<String> statusHtml, BiConsumer<String, String> setConfig,
 		Supplier<String> tokenGenerator)
 	{
+		this(config, statusHtml, setConfig, tokenGenerator, () -> {});
+	}
+
+	PairingPanel(CompanionConfig config, Supplier<String> statusHtml, BiConsumer<String, String> setConfig,
+		Supplier<String> tokenGenerator, Runnable sendNow)
+	{
 		this.config = config;
 		this.statusHtml = statusHtml;
 		this.setConfig = setConfig;
 		this.tokenGenerator = tokenGenerator;
+		this.sendNow = sendNow != null ? sendNow : () -> {};
 		remask.setRepeats(false);
 
 		setLayout(new BorderLayout());
@@ -95,11 +103,13 @@ class PairingPanel extends PluginPanel
 		body.add(address);
 		JButton saveAddress = new JButton("Save");
 		saveAddress.addActionListener(e -> saveAddress());
-		body.add(buttons(saveAddress));
+		JButton sendNowButton = new JButton("Send Now");
+		sendNowButton.addActionListener(e -> this.sendNow.run());
+		body.add(buttons(saveAddress, sendNowButton));
 		body.add(gap());
 
-		JLabel help = new JLabel("<html>To pair: type the Sync Token into the Pssst app, and type the address the app "
-			+ "shows into Phone Address here. Your phone must be on the same Wi-Fi, or on Tailscale.</html>");
+		JLabel help = new JLabel("<html>To pair: type the Sync Token (or your own word like <i>Goblin</i>) into the Pssst app, "
+			+ "and type the address the app shows into Phone Address here.</html>");
 		help.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		help.setAlignmentX(LEFT_ALIGNMENT);
 		body.add(help);
@@ -146,6 +156,7 @@ class PairingPanel extends PluginPanel
 		}
 		setConfig.accept("syncToken", value);
 		setTokenVisible(false);
+		sendNow.run();
 	}
 
 	private void makeNewToken()
@@ -157,6 +168,7 @@ class PairingPanel extends PluginPanel
 		{
 			setConfig.accept("syncToken", tokenGenerator.get());
 			setTokenVisible(true);
+			sendNow.run();
 		}
 	}
 
@@ -164,6 +176,7 @@ class PairingPanel extends PluginPanel
 	{
 		setConfig.accept("phoneAddress", address.getText().trim());
 		refresh();
+		sendNow.run();
 	}
 
 	/** What the player needs to know about sending to the phone right now, in plain words. */
@@ -210,13 +223,10 @@ class PairingPanel extends PluginPanel
 		}
 	}
 
-	/** A gentle note under a short, hand-typed token; null when the token is fine. */
+	/** Any non-empty Sync Token is valid over private LAN / Tailscale; null when fine. */
 	static String tokenNote(String token)
 	{
-		int length = token == null ? 0 : token.trim().length();
-		return length > 0 && length < MIN_TOKEN_LENGTH
-			? "<html>Short tokens are easy to guess. 16+ characters, or use New.</html>"
-			: null;
+		return null;
 	}
 
 	static String ago(long ms)

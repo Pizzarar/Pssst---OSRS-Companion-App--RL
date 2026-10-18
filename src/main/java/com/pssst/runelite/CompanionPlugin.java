@@ -220,17 +220,27 @@ public class CompanionPlugin extends Plugin
 	private ScheduledFuture<?> debounceTask;
 	private int tickCounter = 0;
 
-	/** 128 bits from SecureRandom, as hex. The token is the only credential between PC and phone; never logged. */
+	private static final String[] TOKEN_MONSTERS = {
+		"goblin", "jad", "zulrah", "vorkath", "elvarg", "cerberus", "kraken", "bandos",
+		"saradomin", "zamorak", "armadyl", "guthix", "olm", "verzik", "tumeken", "nex",
+		"barrow", "slayer", "tzhaar", "wyvern", "kurask", "nechryael", "gargoyle", "abyssal",
+		"dragon", "rune", "gilded", "crystal", "obsidian", "torva", "ancestral", "masori"
+	};
+
+	private static final String[] TOKEN_ITEMS = {
+		"whip", "scimitar", "shark", "ranarr", "blowpipe", "crossbow", "halberd", "defender",
+		"tbow", "scythe", "shadow", "fang", "claws", "godsword", "warhammer", "rapier",
+		"pickaxe", "harpoon", "axe", "tinderbox", "spade", "chisel", "cannon", "thrall",
+		"prayer", "stamina", "brews", "angler", "karambwan", "supercomb", "lantern", "totem"
+	};
+
+	/** Human-friendly OSRS word-pair token (e.g. goblin-whip) for easy pairing across PC and phone. */
 	static String newToken()
 	{
-		byte[] bytes = new byte[16];
-		new SecureRandom().nextBytes(bytes);
-		StringBuilder token = new StringBuilder();
-		for (byte b : bytes)
-		{
-			token.append(String.format("%02x", b));
-		}
-		return token.toString();
+		SecureRandom random = new SecureRandom();
+		String first = TOKEN_MONSTERS[random.nextInt(TOKEN_MONSTERS.length)];
+		String second = TOKEN_ITEMS[random.nextInt(TOKEN_ITEMS.length)];
+		return first + "-" + second;
 	}
 
 	@Provides
@@ -254,7 +264,11 @@ public class CompanionPlugin extends Plugin
 			@Override
 			public void request(int id, Runnable onLoaded)
 			{
-				itemManager.getImage(id).onLoaded(onLoaded);
+				itemManager.getImage(id).onLoaded(() ->
+				{
+					onLoaded.run();
+					clientThread.invokeLater(iconBook::process);
+				});
 			}
 
 			@Override
@@ -299,7 +313,8 @@ public class CompanionPlugin extends Plugin
 		deliveryTask = executor.scheduleWithFixedDelay(this::deliveryTick, DELIVERY_TICK_SECONDS, DELIVERY_TICK_SECONDS, TimeUnit.SECONDS);
 
 		pairingPanel = new PairingPanel(config, this::phoneStatusHtml,
-			(key, value) -> configManager.setConfiguration(CONFIG_GROUP, key, value), CompanionPlugin::newToken);
+			(key, value) -> configManager.setConfiguration(CONFIG_GROUP, key, value), CompanionPlugin::newToken,
+			this::sendNow);
 		navigationButton = NavigationButton.builder()
 			.tooltip("Pssst Companion")
 			.icon(panelIcon())
@@ -587,6 +602,16 @@ public class CompanionPlugin extends Plugin
 		// affected by a varp write, so the tracked-varbit branch above already sees them.
 	}
 
+	void sendNow()
+	{
+		phonePolicy.reset();
+		phoneAddressProblem = null;
+		if (executor != null)
+		{
+			executor.execute(this::deliveryTick);
+		}
+	}
+
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
@@ -595,8 +620,7 @@ public class CompanionPlugin extends Plugin
 			String key = event.getKey();
 			if ("syncToken".equals(key) || "sendToPhone".equals(key) || "phoneAddress".equals(key) || "includeBank".equals(key))
 			{
-				phonePolicy.reset();
-				phoneAddressProblem = null;
+				sendNow();
 			}
 			if (pairingPanel != null)
 			{
@@ -1099,6 +1123,10 @@ public class CompanionPlugin extends Plugin
 	{
 		try
 		{
+			if (iconBook != null && iconBook.hasPending() && clientThread != null)
+			{
+				clientThread.invokeLater(iconBook::process);
+			}
 			deliverAll();
 			if (pairingPanel != null)
 			{
@@ -1172,6 +1200,10 @@ public class CompanionPlugin extends Plugin
 			{
 				iconBook.markSent(icons.keySet());
 				iconBook.want(outcome.needIcons);
+				if (outcome.needIcons != null && !outcome.needIcons.isEmpty() && clientThread != null)
+				{
+					clientThread.invokeLater(iconBook::process);
+				}
 				executor.execute(this::saveDeliveryMarks);
 			}
 			if (pairingPanel != null)

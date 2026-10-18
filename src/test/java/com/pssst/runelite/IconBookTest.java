@@ -51,16 +51,22 @@ public class IconBookTest
 	@Test
 	public void anIconIsReadyOnceItHasLoaded()
 	{
+		Assert.assertFalse(book.hasPending());
 		book.want(Arrays.asList(5952, 2446));
+		Assert.assertTrue("wanted icons are pending", book.hasPending());
 		book.process();
 		Assert.assertEquals(Arrays.asList(5952, 2446), source.requested);
 		Assert.assertFalse("still loading", book.hasReady());
+		Assert.assertTrue("loading icons are pending", book.hasPending());
 
 		source.finish(5952);
 		book.process();
 		Assert.assertTrue(book.hasReady());
 		Assert.assertEquals("Item 5952", book.takeReady(10).get(5952).getName());
 		Assert.assertFalse("2446 hasn't loaded", book.takeReady(10).containsKey(2446));
+		source.finish(2446);
+		book.process();
+		Assert.assertFalse("all icons encoded", book.hasPending());
 	}
 
 	@Test

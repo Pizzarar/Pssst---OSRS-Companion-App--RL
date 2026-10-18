@@ -15,9 +15,9 @@ package com.pssst.runelite;
 final class DeliveryPolicy
 {
 	static final long MIN_SEND_INTERVAL_MS = 120_000L;
-	static final long RETRY_INTERVAL_MS = 30_000L;
+	static final long RETRY_INTERVAL_MS = 5_000L;
 	/** While item icons are waiting to go out, the next send may follow this soon after the last. */
-	static final long ICON_CATCH_UP_INTERVAL_MS = 15_000L;
+	static final long ICON_CATCH_UP_INTERVAL_MS = 3_000L;
 
 	enum State
 	{
@@ -27,7 +27,7 @@ final class DeliveryPolicy
 		DELIVERED,
 		/** The last attempt could not connect; retrying. */
 		WAITING,
-		/** The target refused the Sync Token; stopped until the settings change. */
+		/** The target refused the Sync Token; retrying while the user updates the phone token. */
 		REJECTED,
 		/** The target asked for a pause (403/429) or answered with an error. */
 		PAUSED
@@ -63,13 +63,13 @@ final class DeliveryPolicy
 	{
 		long now = clock.getAsLong();
 		boolean newer = observedAt > deliveredObservedAt;
-		if (inFlight || state == State.REJECTED || observedAt <= 0 || !(newer || hasExtras) || now < notBefore)
+		if (inFlight || observedAt <= 0 || !(newer || hasExtras) || now < notBefore)
 		{
 			return false;
 		}
 		long wait = hasExtras ? ICON_CATCH_UP_INTERVAL_MS : MIN_SEND_INTERVAL_MS;
-		boolean paced = state == State.WAITING || flush || lastSuccessfulSendAt == Long.MIN_VALUE
-			|| now - lastSuccessfulSendAt >= wait;
+		boolean paced = state == State.WAITING || state == State.REJECTED || flush
+			|| lastSuccessfulSendAt == Long.MIN_VALUE || now - lastSuccessfulSendAt >= wait;
 		if (!paced)
 		{
 			return false;
@@ -101,6 +101,7 @@ final class DeliveryPolicy
 				state = State.WAITING;
 				break;
 			case REJECTED:
+				notBefore = now + RETRY_INTERVAL_MS;
 				state = State.REJECTED;
 				break;
 			case BACKOFF:
@@ -120,13 +121,15 @@ final class DeliveryPolicy
 		flush = true;
 	}
 
-	/** The settings changed (address, token): start fresh, but remember what the target already has. */
+	/** The settings changed (address, token) or Send Now clicked: start fresh and send the latest snapshot. */
 	synchronized void reset()
 	{
 		state = State.IDLE;
+		deliveredObservedAt = 0;
 		waitingSince = 0;
 		notBefore = 0;
 		inFlight = false;
+		flush = true;
 		lastSuccessfulSendAt = Long.MIN_VALUE;
 	}
 

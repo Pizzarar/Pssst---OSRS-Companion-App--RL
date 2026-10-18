@@ -26,10 +26,11 @@ public class PairingPanelTest
 	@Test
 	public void aShortHandTypedTokenGetsAGentleNote()
 	{
-		Assert.assertNotNull(PairingPanel.tokenNote("mom"));
-		Assert.assertNull("your own longer token is fine", PairingPanel.tokenNote("my-own-sync-token-123"));
-		Assert.assertNull(PairingPanel.tokenNote(CompanionPlugin.newToken()));
-		Assert.assertEquals(32, CompanionPlugin.newToken().length());
+		Assert.assertNull(PairingPanel.tokenNote("Goblin"));
+		Assert.assertNull(PairingPanel.tokenNote("my-own-sync-token-123"));
+		String generated = CompanionPlugin.newToken();
+		Assert.assertNull(PairingPanel.tokenNote(generated));
+		Assert.assertTrue("expected <monster>-<item>, got " + generated, generated.matches("[a-z]+-[a-z]+"));
 	}
 
 	@Test

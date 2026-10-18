@@ -58,16 +58,16 @@ public class DeliveryPolicyTest
 	}
 
 	@Test
-	public void aPhoneThatIsNotListeningIsRetriedEvery30sUntilItLands()
+	public void aPhoneThatIsNotListeningIsRetriedEvery5sUntilItLands()
 	{
 		Assert.assertTrue(policy.shouldSend(500));
 		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.UNREACHABLE), 500);
 		Assert.assertEquals(DeliveryPolicy.State.WAITING, policy.state());
 
-		now.addAndGet(29_000);
+		now.addAndGet(4_000);
 		Assert.assertFalse(policy.shouldSend(500));
 		now.addAndGet(1_000);
-		Assert.assertTrue("30 s later it tries again, without the 2-minute wait", policy.shouldSend(500));
+		Assert.assertTrue("5 s later it tries again, without the 2-minute wait", policy.shouldSend(500));
 		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.DELIVERED), 500);
 		Assert.assertEquals(DeliveryPolicy.State.DELIVERED, policy.state());
 		Assert.assertEquals(500, policy.deliveredObservedAt());
@@ -79,12 +79,12 @@ public class DeliveryPolicyTest
 		Assert.assertTrue(policy.shouldSend(500));
 		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.UNREACHABLE), 500);
 		long since = now.get();
-		now.addAndGet(30_000);
+		now.addAndGet(5_000);
 		Assert.assertTrue(policy.shouldSend(500));
 		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.UNREACHABLE), 500);
 		Assert.assertEquals("the first failure starts the clock", since, policy.waitingSince());
 
-		now.addAndGet(30_000);
+		now.addAndGet(5_000);
 		Assert.assertTrue(policy.shouldSend(500));
 		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.DELIVERED), 500);
 		Assert.assertEquals(0, policy.waitingSince());
@@ -94,11 +94,11 @@ public class DeliveryPolicyTest
 	public void waitingIconsJustifyASendEvenWithNothingNewAndASoonerOne()
 	{
 		delivered(500);
-		now.addAndGet(5_000);
+		now.addAndGet(1_000);
 		Assert.assertFalse("nothing new and no icons", policy.shouldSend(500, false));
-		Assert.assertFalse("icons, but only 5 s after the last send", policy.shouldSend(500, true));
-		now.addAndGet(10_000);
-		Assert.assertTrue("icons 15 s after the last send, though the game state is the same", policy.shouldSend(500, true));
+		Assert.assertFalse("icons, but only 1 s after the last send", policy.shouldSend(500, true));
+		now.addAndGet(2_000);
+		Assert.assertTrue("icons 3 s after the last send, though the game state is the same", policy.shouldSend(500, true));
 	}
 
 	@Test
@@ -110,16 +110,20 @@ public class DeliveryPolicyTest
 	}
 
 	@Test
-	public void aRejectedTokenStopsUntilTheSettingsChange()
+	public void aRejectedTokenRetriesOnIntervalAndResetResendsExistingSnapshot()
 	{
 		Assert.assertTrue(policy.shouldSend(500));
 		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.REJECTED), 500);
-		now.addAndGet(60 * 60_000);
-		Assert.assertFalse(policy.shouldSend(900));
 		Assert.assertEquals(DeliveryPolicy.State.REJECTED, policy.state());
+		now.addAndGet(4_000);
+		Assert.assertFalse("waits for retry interval after 401", policy.shouldSend(500));
+		now.addAndGet(1_000);
+		Assert.assertTrue("retries after 5 s so fixing token on phone recovers", policy.shouldSend(500));
+		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.DELIVERED), 500);
 
+		Assert.assertFalse("already delivered", policy.shouldSend(500));
 		policy.reset();
-		Assert.assertTrue(policy.shouldSend(900));
+		Assert.assertTrue("reset clears deliveredObservedAt so same snapshot re-sends", policy.shouldSend(500));
 	}
 
 	@Test
