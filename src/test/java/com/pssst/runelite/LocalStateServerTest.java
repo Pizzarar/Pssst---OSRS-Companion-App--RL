@@ -168,6 +168,33 @@ public class LocalStateServerTest
 		Assert.assertFalse(server.isRunning());
 	}
 
+	@Test
+	public void onlyHomeNetworkAndTailscalePeersAreServed() throws Exception
+	{
+		for (String ok : new String[]{"127.0.0.1", "::1", "192.168.1.20", "10.1.2.3", "172.16.0.1", "172.31.255.1",
+			"169.254.3.4", "100.64.0.1", "100.127.255.255", "fe80::1", "fd7a:115c:a1e0::1"})
+		{
+			Assert.assertTrue(ok, LocalStateServer.isPrivatePeer(java.net.InetAddress.getByName(ok)));
+		}
+		for (String refused : new String[]{"8.8.8.8", "203.0.113.9", "172.32.0.1", "172.15.0.1", "100.63.255.255",
+			"100.128.0.1", "2001:db8::1", "2606:4700::1111"})
+		{
+			Assert.assertFalse(refused, LocalStateServer.isPrivatePeer(java.net.InetAddress.getByName(refused)));
+		}
+		Assert.assertFalse(LocalStateServer.isPrivatePeer(null));
+	}
+
+	@Test
+	public void stopFreesThePortWithoutInterruptingAnything() throws IOException
+	{
+		server.start(port, true, TOKEN);
+		server.stop();
+		try (ServerSocket again = new ServerSocket(port))
+		{
+			Assert.assertTrue(again.isBound());
+		}
+	}
+
 	private void assertStatus(int expected, String path, String auth)
 	{
 		try

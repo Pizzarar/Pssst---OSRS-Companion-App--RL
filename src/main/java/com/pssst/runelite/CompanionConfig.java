@@ -20,15 +20,16 @@ public interface CompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Local Server",
-		description = "Let the Pssst app on your phone read your data straight from this PC, over your Wi-Fi or a VPN such as Tailscale",
+		description = "Let the Pssst app on your phone read your data straight from this PC, over your home Wi-Fi (or Tailscale)",
 		position = 10
 	)
 	String localWsSection = "localWsSection";
 
 	@ConfigSection(
-		name = "Your Own Server",
-		description = "Send your data to a server you run yourself, such as your own Pssst Worker, so the app can reach it from anywhere",
-		position = 20
+		name = "Advanced: Your Own Server",
+		description = "Optional. Send your data to a server you run yourself, such as your own Pssst Worker. Most players do not need this.",
+		position = 20,
+		closedByDefault = true
 	)
 	String byosSection = "byosSection";
 
@@ -89,8 +90,8 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "bindLoopbackOnly",
 		name = "This PC Only",
-		description = "On: only this PC can connect. Turn it off so your phone can connect over your Wi-Fi or a VPN.",
-		warning = "Turning this off lets other devices on your network reach this PC on the chosen port. They still need your Sync Token, and the connection is not encrypted. Only do this on a network you trust.",
+		description = "On: only this PC can connect. Turn it off so the Pssst app on your phone can connect over your Wi-Fi or Tailscale.",
+		warning = "Turning this off lets devices on your network reach this PC on the chosen port. They still need your Sync Token, and the connection is not encrypted. Only do this on a network you trust, such as your home Wi-Fi. If Windows asks, allow Java on Private networks only.",
 		position = 13,
 		section = localWsSection
 	)

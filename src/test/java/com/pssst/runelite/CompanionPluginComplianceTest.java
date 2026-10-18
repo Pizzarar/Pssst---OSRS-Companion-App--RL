@@ -137,6 +137,24 @@ public class CompanionPluginComplianceTest
 		Assert.assertTrue("bindLoopbackOnly must default to true (LAN exposure is opt-in)", config.bindLoopbackOnly());
 		Assert.assertFalse("Pushing to a configured server must be opt-in (default false)", config.enableByosPush());
 		Assert.assertEquals("no server is assumed: the Server URL starts empty", "", config.serverUrl());
+
+		// The optional outbound server stays out of the way: its section starts collapsed
+		java.lang.reflect.Field byosField = CompanionConfig.class.getField("byosSection");
+		net.runelite.client.config.ConfigSection byos = byosField.getAnnotation(net.runelite.client.config.ConfigSection.class);
+		Assert.assertTrue("Advanced: Your Own Server starts collapsed", byos.closedByDefault());
+		Assert.assertEquals("Advanced: Your Own Server", byos.name());
+	}
+
+	@Test
+	public void observedTimesAreIntegerMillisecondsAndSeparateFromServedTime()
+	{
+		StateDTO dto = StateDTO.builder().observedAt(1_700_000_000_123L).bankObservedAt(1_699_999_000_000L).build();
+		JsonObject obj = new JsonParser().parse(gson.toJson(dto)).getAsJsonObject();
+
+		Assert.assertEquals(1_700_000_000_123L, obj.get("observedAt").getAsLong());
+		Assert.assertEquals(1_699_999_000_000L, obj.get("bankObservedAt").getAsLong());
+		Assert.assertTrue(obj.get("observedAt").getAsJsonPrimitive().isNumber());
+		Assert.assertFalse("updated_at belongs to the envelope, not the snapshot", obj.has("updated_at"));
 	}
 
 	@Test

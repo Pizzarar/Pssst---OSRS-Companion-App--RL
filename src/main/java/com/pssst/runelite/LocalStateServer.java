@@ -24,7 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  *   (a query parameter would end up in logs and browser history);
  * - it refuses to start without a token, so it can never serve unauthenticated;
  * - request reads are bounded in size (8 KB) and total time (3 s), and requests are handled one at a time;
- * - binds to 127.0.0.1 unless the player explicitly opts into LAN exposure.
+ * - binds to 127.0.0.1 unless the player explicitly opts into LAN exposure, and even then only answers
+ *   home-network and Tailscale addresses.
  */
 @Slf4j
 @Singleton
@@ -101,11 +102,8 @@ public class LocalStateServer
 			}
 			serverSocket = null;
 		}
-		if (acceptThread != null)
-		{
-			acceptThread.interrupt();
-			acceptThread = null;
-		}
+		// Closing the socket ends accept() with an IOException, which stops the thread; Thread.interrupt is off limits on the Hub
+		acceptThread = null;
 		currentPort = -1;
 	}
 
@@ -139,8 +137,36 @@ public class LocalStateServer
 		}
 	}
 
+	/**
+	 * Home networks and Tailscale only: loopback, link-local, RFC 1918 and unique-local addresses, plus 100.64.0.0/10
+	 * (Tailscale, carrier-grade NAT). Anything else is closed without a response, so a port forwarded by mistake
+	 * does not answer the internet even though the token would still be required.
+	 */
+	static boolean isPrivatePeer(InetAddress peer)
+	{
+		if (peer == null)
+		{
+			return false;
+		}
+		if (peer.isLoopbackAddress() || peer.isLinkLocalAddress() || peer.isSiteLocalAddress())
+		{
+			return true;
+		}
+		byte[] b = peer.getAddress();
+		if (b.length == 4)
+		{
+			return (b[0] & 0xFF) == 100 && (b[1] & 0xC0) == 0x40;
+		}
+		return b.length == 16 && (b[0] & 0xFE) == 0xFC;
+	}
+
 	private void handle(Socket client) throws IOException
 	{
+		if (!isPrivatePeer(client.getInetAddress()))
+		{
+			log.debug("Local state server closed a connection from outside the home network");
+			return;
+		}
 		client.setSoTimeout(READ_TIMEOUT_MS);
 		OutputStream out = client.getOutputStream();
 
