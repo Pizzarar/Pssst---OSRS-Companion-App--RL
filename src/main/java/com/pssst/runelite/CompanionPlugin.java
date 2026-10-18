@@ -10,6 +10,7 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.net.InetAddress;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -575,6 +576,7 @@ public class CompanionPlugin extends Plugin
 			if ("syncToken".equals(key) || "sendToPhone".equals(key) || "phoneAddress".equals(key) || "includeBank".equals(key))
 			{
 				phonePolicy.reset();
+				phoneAddressProblem = null;
 			}
 			if (pairingPanel != null)
 			{
@@ -1106,22 +1108,35 @@ public class CompanionPlugin extends Plugin
 		if (config.sendToPhone())
 		{
 			PhoneAddress.Result address = PhoneAddress.parse(config.phoneAddress());
-			phoneAddressProblem = address.problem;
-			if (address.url != null)
+			if (address.problem != null)
 			{
-				deliver(phonePolicy, address.url, token, state, sends);
+				phoneAddressProblem = address.problem;
+			}
+			else
+			{
+				deliver(phonePolicy, address, token, state, sends);
 			}
 		}
 		return sends;
 	}
 
-	private void deliver(DeliveryPolicy policy, HttpUrl url, String token, StateDTO state, List<CompletableFuture<Void>> sends)
+	private void deliver(DeliveryPolicy policy, PhoneAddress.Result address, String token, StateDTO state,
+		List<CompletableFuture<Void>> sends)
 	{
 		long observedAt = state.getObservedAt();
 		if (!policy.shouldSend(observedAt))
 		{
 			return;
 		}
+		// A name (Tailscale MagicDNS, a router name) is looked up here, on the executor, every time it is used
+		PhoneAddress.Target target = PhoneAddress.target(address, InetAddress::getAllByName);
+		phoneAddressProblem = target.problem;
+		if (target.url == null)
+		{
+			policy.onOutcome(new NetworkDispatcher.Outcome(NetworkDispatcher.Outcome.Kind.UNREACHABLE, 0, 0), observedAt);
+			return;
+		}
+		HttpUrl url = target.url;
 		CompletableFuture<Void> done = new CompletableFuture<>();
 		sends.add(done);
 		networkDispatcher.post(url, token, gson.toJson(payload(state)), outcome ->
@@ -1165,9 +1180,17 @@ public class CompanionPlugin extends Plugin
 
 	private String phoneStatusHtml()
 	{
-		return PairingPanel.describe(config.enableSync(), config.sendToPhone(),
-			config.sendToPhone() ? PhoneAddress.parse(config.phoneAddress()).problem : null,
-			phonePolicy.state(), latestState != null, phonePolicy.lastDeliveredAt(), System.currentTimeMillis());
+		String problem = null;
+		if (config.sendToPhone())
+		{
+			problem = PhoneAddress.parse(config.phoneAddress()).problem;
+			if (problem == null)
+			{
+				problem = phoneAddressProblem;
+			}
+		}
+		return PairingPanel.describe(config.enableSync(), config.sendToPhone(), problem, phonePolicy.state(),
+			latestState != null, phonePolicy.lastDeliveredAt(), phonePolicy.waitingSince(), System.currentTimeMillis());
 	}
 
 	/** The state to save, or null when there is nothing worth saving (sync off, never logged in, profile unknown). */

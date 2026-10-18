@@ -72,7 +72,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "phoneAddress",
 		name = "Phone Address",
-		description = "The address the Pssst app shows, for example 192.168.1.42 (or your phone's Tailscale address, 100.x.x.x).",
+		description = "The address the Pssst app shows, for example 192.168.1.42, or a name for your phone (a Tailscale name, or one your router gives it).",
 		position = 12,
 		section = phoneSection
 	)

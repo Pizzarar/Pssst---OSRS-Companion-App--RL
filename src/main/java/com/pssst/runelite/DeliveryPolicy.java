@@ -35,6 +35,7 @@ final class DeliveryPolicy
 
 	private long deliveredObservedAt;
 	private long lastDeliveredAt;
+	private long waitingSince;
 	private long lastSuccessfulSendAt = Long.MIN_VALUE;
 	private long notBefore;
 	private boolean inFlight;
@@ -71,6 +72,7 @@ final class DeliveryPolicy
 		switch (outcome.kind)
 		{
 			case DELIVERED:
+				waitingSince = 0;
 				deliveredObservedAt = Math.max(deliveredObservedAt, sentObservedAt);
 				lastDeliveredAt = now;
 				lastSuccessfulSendAt = now;
@@ -78,6 +80,10 @@ final class DeliveryPolicy
 				state = State.DELIVERED;
 				break;
 			case UNREACHABLE:
+				if (waitingSince == 0)
+				{
+					waitingSince = now;
+				}
 				notBefore = now + RETRY_INTERVAL_MS;
 				state = State.WAITING;
 				break;
@@ -105,6 +111,7 @@ final class DeliveryPolicy
 	synchronized void reset()
 	{
 		state = State.IDLE;
+		waitingSince = 0;
 		notBefore = 0;
 		inFlight = false;
 		lastSuccessfulSendAt = Long.MIN_VALUE;
@@ -124,6 +131,12 @@ final class DeliveryPolicy
 	synchronized long lastDeliveredAt()
 	{
 		return lastDeliveredAt;
+	}
+
+	/** When the current run of failed attempts began (epoch ms), or 0 while the phone is being reached. */
+	synchronized long waitingSince()
+	{
+		return waitingSince;
 	}
 
 	synchronized State state()

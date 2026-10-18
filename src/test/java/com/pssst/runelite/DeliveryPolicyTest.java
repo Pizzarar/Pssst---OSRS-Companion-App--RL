@@ -74,6 +74,23 @@ public class DeliveryPolicyTest
 	}
 
 	@Test
+	public void itRemembersWhenThePhoneWasLastReachable()
+	{
+		Assert.assertTrue(policy.shouldSend(500));
+		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.UNREACHABLE), 500);
+		long since = now.get();
+		now.addAndGet(30_000);
+		Assert.assertTrue(policy.shouldSend(500));
+		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.UNREACHABLE), 500);
+		Assert.assertEquals("the first failure starts the clock", since, policy.waitingSince());
+
+		now.addAndGet(30_000);
+		Assert.assertTrue(policy.shouldSend(500));
+		policy.onOutcome(outcome(NetworkDispatcher.Outcome.Kind.DELIVERED), 500);
+		Assert.assertEquals(0, policy.waitingSince());
+	}
+
+	@Test
 	public void onlyOneSendIsInFlight()
 	{
 		Assert.assertTrue(policy.shouldSend(500));

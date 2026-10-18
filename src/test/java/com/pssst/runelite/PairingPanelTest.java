@@ -9,7 +9,7 @@ public class PairingPanelTest
 
 	private static String describe(boolean sync, boolean send, String problem, DeliveryPolicy.State state, boolean data, long last)
 	{
-		return PairingPanel.describe(sync, send, problem, state, data, last, NOW);
+		return PairingPanel.describe(sync, send, problem, state, data, last, 0, NOW);
 	}
 
 	@Test
@@ -30,6 +30,16 @@ public class PairingPanelTest
 		Assert.assertNull("your own longer token is fine", PairingPanel.tokenNote("my-own-sync-token-123"));
 		Assert.assertNull(PairingPanel.tokenNote(CompanionPlugin.newToken()));
 		Assert.assertEquals(32, CompanionPlugin.newToken().length());
+	}
+
+	@Test
+	public void afterHalfAnHourWithoutThePhoneItSuggestsTheAddressChanged()
+	{
+		String soon = PairingPanel.describe(true, true, null, DeliveryPolicy.State.WAITING, true, 0, NOW - 5 * 60_000L, NOW);
+		Assert.assertTrue(soon, soon.contains("Waiting for your phone"));
+		String late = PairingPanel.describe(true, true, null, DeliveryPolicy.State.WAITING, true, 0, NOW - 45 * 60_000L, NOW);
+		Assert.assertTrue(late, late.contains("address may have changed"));
+		Assert.assertTrue(late, late.contains("45 min"));
 	}
 
 	@Test

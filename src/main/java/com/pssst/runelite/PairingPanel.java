@@ -167,8 +167,11 @@ class PairingPanel extends PluginPanel
 	}
 
 	/** What the player needs to know about sending to the phone right now, in plain words. */
+	/** After this long without reaching the phone, the panel suggests its address may have changed. */
+	static final long ADDRESS_HINT_AFTER_MS = 30 * 60_000L;
+
 	static String describe(boolean enableSync, boolean sendToPhone, String addressProblem, DeliveryPolicy.State state,
-		boolean hasData, long lastDeliveredAt, long now)
+		boolean hasData, long lastDeliveredAt, long waitingSince, long now)
 	{
 		if (!enableSync)
 		{
@@ -188,6 +191,12 @@ class PairingPanel extends PluginPanel
 			case DELIVERED:
 				return html("Your phone is up to date.", "It gets changes at most every 2 minutes while you play." + last);
 			case WAITING:
+				if (waitingSince > 0 && now - waitingSince >= ADDRESS_HINT_AFTER_MS)
+				{
+					return html("Can't reach your phone (" + ago(now - waitingSince).replace(" ago", "") + ").",
+						"If the Pssst app is open on the same Wi-Fi, your phone's address may have changed: the app "
+							+ "shows the current one. Update Phone Address below." + last);
+				}
 				return html("Waiting for your phone.", "The Pssst app isn't listening right now (closed, or not on the "
 					+ "same Wi-Fi). It will get the latest as soon as it is." + last);
 			case REJECTED:
