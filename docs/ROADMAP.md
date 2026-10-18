@@ -7,13 +7,18 @@ Every item from the 2026-10-17 code review is closed: farming and birdhouses por
 
 ## Now: before Plugin Hub submission
 
+The full sequence (Hub packaging, the setup guide, the Google Play release, going public) is `plans/hub-submission.md`.
+
 | ID | Item | Plan / owner |
 |---|---|---|
-| N1 | Verify the farming payment rows, then remove the "unverified" notice | `plans/unverified-logic.md` §1 |
-| N2 | Tears of Guthix: find a source or observe it in game | `plans/unverified-logic.md` §2 |
-| N3 | Ask the Hub maintainers about the Local Server (the question is in `plans/lan-first.md` §2), then pick Branch A (LAN) or B (push to your own server) | `plans/lan-first.md` |
-| N4 | Setup docs, LAN-first: one Same Wi-Fi path with a Tailscale note; the Worker pages leave the guide (`plans/lan-first.md` §3.D) | Project doc `claude/setup-docs-handoff.md` |
-| N5 | Real-phone same-Wi-Fi test, Windows Firewall prompt (which program, which network profile), reminder lateness under Doze (decides AN-4), PC shutdown mid-session, the setup-guide screenshots | Aub only (`plans/lan-first.md` §5) |
+| N1 | Verify the farming payment rows, then remove the "unverified" notice. Aub fills `checklists/farming-payments.md` | `plans/hub-submission.md` HS-2, HS-7 |
+| N2 | Tears of Guthix: code search first, then observe with `checklists/tears-of-guthix.md` | `plans/hub-submission.md` HS-3, HS-8 |
+| N3 | Hub answer on the Local Server: Aub researches with `research/hub-socket-gemini-prompt.md`, asks the maintainers if still unclear, then picks Branch A (LAN) or B (push) | `plans/lan-first.md` §2, `plans/hub-submission.md` HS-1 |
+| N4 | Fresh LAN-first guide for the GitHub Wiki (old drafts scrapped), privacy policy on GitHub Pages | `plans/hub-submission.md` HS-19 to HS-24 |
+| N5 | Real-phone same-Wi-Fi test (**pairing, sync and timers confirmed working 2026-10-17**), Windows Firewall prompt (which program, which network profile), reminder lateness under Doze (decides AN-4), PC shutdown mid-session, the setup-guide screenshots | Aub only (`plans/lan-first.md` §5) |
+
+| N6 | Google Play release: developer account, 12 testers for 14 days, demo mode, signed AAB, listing | `plans/hub-submission.md` §F |
+| **N7** | **Reminder: make the repos public when first needed** (Play closed-test upload, Wiki publish or Hub PR, whichever comes first), after a history secret scan and untracking `pssst-mock-server/state.json` | `plans/hub-submission.md` HS-30 |
 
 ### LAN-first (`plans/lan-first.md`)
 
