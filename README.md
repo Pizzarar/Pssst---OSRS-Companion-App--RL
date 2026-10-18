@@ -27,6 +27,7 @@ Only data the game already shows you, as plain numbers and names:
 - a fixed list of progress flags: achievement diary tiers, daily reset claims, Tears of Guthix, Miscellania approval and coffer, Nightmare Zone reward points
 - the current Slayer assignment (task, area, kills left, points, streak)
 - the last-seen state of each farming patch and each Fossil Island birdhouse, with the time it was seen
+- small item pictures (icons) for items your phone is missing, drawn by your own RuneLite client and sent once each
 
 Not sent: your username, chat, location, friends, or anything about other players.
 
