@@ -37,6 +37,9 @@ GUIDELINES addition, approved by Aub 2026-10-17; add it to `GUIDELINES.md` when 
 | G7 | Worker | Optional slash commands through the Interactions Endpoint URL (one Discord app owned by the admin): `/overdue`, `/shame` (weekly board), `/mute 8h`, `/roast on\|off`. Personal replies are ephemeral. | G4, G5 |
 | G8 | Docs | "Group Discord (advanced)" setup page for the admin and a short one for friends. The privacy page says the group server gets a nickname and timer times only. Update `CLAUDE.md` contracts in all three repos. | G1–G4 |
 
+## LAN-first note (2026-10-17)
+The LAN-first change (`plans/lan-first.md`) blocks nothing here. The nags need the outbound push (`NetworkDispatcher`, with its 403/429 back-off), which stays in the plugin as `Send to My Server` under *Advanced: Your Own Server*, and the frozen Worker contract. G0 (`readyAt` on `farming[]`) is independent of `observedAt`. One thing to expect in G1's Hub review: the maintainers have said that serving versus sending data over HTTP makes no difference to their "expose player information over HTTP" rule, so the group payload must stay as narrow as designed (nickname plus `{kind, patch, readyAt}`) and its description should say so.
+
 ## Open questions
 - Should the Android app show the group board? Default: no. Discord is the group surface; the app stays personal.
 - Can one plugin send to both a personal Worker and a group Worker at once? Default: yes. They are separate settings with separate tokens.

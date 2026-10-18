@@ -1,6 +1,6 @@
 # Plan: LAN-first
 
-Status: planned, nothing built. Written 2026-10-17. Covers all three repos (`PssstRunelite`, `PssstAndroid`, `PssstWorker`).
+Status: shared work and the Branch A plugin/app items are built (see Implementation status); Hub PR, wiki and Branch B items are held. Written 2026-10-17. Covers all three repos (`PssstRunelite`, `PssstAndroid`, `PssstWorker`).
 
 ## 1. Summary
 
@@ -19,6 +19,27 @@ Verified facts this plan rests on:
 - The response envelope is `{ data, updated_at }`, with `updated_at` in ms set when the plugin serializes. `syncState()` runs about 2 s after any change, and every 1500 ticks (15 min) while logged in.
 - Before login after a RuneLite start, the server answers **404**: `latestStateJson` is null until the first sync. The app shows "Connected, no state for this token yet" and keeps its cache.
 - The app already caches the last snapshot in Room (`player_states`). Timers and reminders are computed from absolute `observedAt`/`readyAt` and `nowMs`, not from sync time. Gaps are in §3.B.
+
+## Implementation status (2026-10-17)
+
+Built and tested, uncommitted to `main` and unpushed. Plugin: `claude/pssst-lan-first-plan-0982b8` (85 tests). Android: `claude/lan-first` in the worktree `L:\Dev\Mobile\PssstAndroid-lanfirst` (84 tests; the main Android checkout has uncommitted design work, so it was left alone). Worker: `claude/lan-first` (11 tests).
+
+| State | Items | Count |
+|---|---|---|
+| Built | PL-1, PL-2, PL-3, PL-4, PL-5, PL-6, PL-7, PL-8, PL-10, PL-13; AN-1, AN-2, AN-3, AN-5, AN-6, AN-7, AN-9; WK-1, WK-2; DOC-6 (ROADMAP edits applied), DG-1 | 21 |
+| Held for the Hub answer | PL-12 (Hub PR; draft below), PL-11, AN-10, WK-3, WK-4, DOC-7 (Branch B) | 6 |
+| Held: docs outside this branch | DOC-1 to DOC-5. The wiki drafts are uncommitted in the `pssst-setup-wiki-99bed1` worktree (another task, edited minutes earlier) and the handoff/prompt files are not on disk. Apply the edits in §3.D there. `docs/setup.md` is also being replaced by a pointer on that branch, so it was not touched. | 5 |
+| Deferred as recommended | PL-9 and AN-8 (QR), AN-4 (alarm reminders, measure Doze lateness first) | 3 |
+
+Differences from the plan as written:
+- **PL-1:** the snapshot is written after every debounced sync (within 2 s of any change) and on `ClientShutdown`/plugin shutdown, instead of a separate flush on `LOGIN_SCREEN`; the file is never more than 2 s behind. The write is skipped until the RS profile is known, and the plugin does not publish an empty state before the first login of a session.
+- **PL-3/PL-4:** `observedAt` is stamped on every game event and on the heartbeat; the bank carry-over is a separate class (`BankCarry`) so it is unit-tested. A profile switch inside one session drops the previous profile's bank and potion storage.
+- **AN-1:** the status reads "Not reachable right now. Showing saved data." (it also fits a Worker URL), shown in the muted colour rather than red.
+- **AN-2:** the first connectivity report after process start is ignored (the app-open sync covers it).
+- **AN-6:** no Room migration: `observedAt` is read from the stored raw JSON.
+- **PL-7:** the section display name is the **proposal** "Advanced: Your Own Server"; the config keys are unchanged. **PL-10** keeps the `This PC Only` name and default and rewords its description and warning (also a proposal).
+
+Needs a real PC and phone before it counts as done (N5): the pairing panel layout, the Windows Firewall prompt, the bank carry-over after a restart in game, Doze lateness, and test plan §5 items 1 to 7.
 
 ## 2. Hub socket research
 
@@ -227,3 +248,11 @@ The phone can only show what it last pulled. If the PC shuts down before the pho
 - The wiki FAQ (draft) says the PC-off case works "only with your own server". Timers already work from cache on every path.
 - `CompanionPlugin`'s `@PluginDescriptor` has no `internalName`, which `Filepath` (`getPluginDirectory()`) requires.
 - `setup-docs-handoff.md`, `setup-wiki-prompt.md` and `code-review-2026-10-17.md` aren't in any repo or worktree on disk. ROADMAP N4 calls the handoff a "project doc", and the planning prompt places it under `docs/handoff/`.
+
+## Appendix: Hub PR draft (PL-12), not submitted
+
+Send the §2 question first. If the answer is yes, the plugin-hub entry gets a `warning=` like bank-bridge's:
+
+> This plugin can serve your bank, inventory, skills, Grand Exchange offers, Slayer task and farming/birdhouse timers on port 8788 to the Pssst app on your phone. Nothing is uploaded, and every request needs your Sync Token. It listens on this PC only unless you turn off "This PC Only" (then only devices on your home network or Tailscale can connect). Another program on your own network could read it if it had your token. Sending to your own server is optional, off by default and carries RuneLite's IP warning.
+
+PR description: link the maintainers' answer; state the payload (no username, location or other players), the two opt-ins, the token, that `last-snapshot.json` lives in the plugin directory through `Filepath`, and that `HubRulesTest` scans for forbidden APIs.
