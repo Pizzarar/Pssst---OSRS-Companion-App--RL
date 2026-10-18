@@ -6,11 +6,13 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -19,29 +21,40 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 
 /**
- * Side panel for pairing and checking on the phone: whether the last snapshot reached the Pssst app, and the Sync Token
- * to type into the app (masked until shown; it masks itself again after a minute). Read-only: it changes no settings and
- * makes no network calls.
+ * Side panel for pairing and checking on the phone: whether the last snapshot reached the Pssst app, the Sync Token
+ * (masked until shown; masks itself again after a minute) and the Phone Address, both with an explicit Save button
+ * (RuneLite's settings fields only save once they lose focus, which is easy to miss). Makes no network calls.
  */
 class PairingPanel extends PluginPanel
 {
 	private static final int TOKEN_VISIBLE_MS = 60_000;
 	private static final int STATUS_REFRESH_MS = 30_000;
+	private static final String MASK = "••••••••••••";
+
+	/** Shortest Sync Token that isn't easy to guess (the plugin generates 32 characters). */
+	static final int MIN_TOKEN_LENGTH = 16;
 
 	private final CompanionConfig config;
 	private final Supplier<String> statusHtml;
+	private final BiConsumer<String, String> setConfig;
+	private final Supplier<String> tokenGenerator;
 
 	private final JLabel status = new JLabel();
 	private final JTextField token = new JTextField();
+	private final JLabel tokenNote = new JLabel();
 	private final JButton showHide = new JButton("Show");
+	private final JTextField address = new JTextField();
 	private final Timer remask = new Timer(TOKEN_VISIBLE_MS, e -> setTokenVisible(false));
 	private final Timer ticker = new Timer(STATUS_REFRESH_MS, e -> refresh());
 	private boolean tokenVisible;
 
-	PairingPanel(CompanionConfig config, Supplier<String> statusHtml)
+	PairingPanel(CompanionConfig config, Supplier<String> statusHtml, BiConsumer<String, String> setConfig,
+		Supplier<String> tokenGenerator)
 	{
 		this.config = config;
 		this.statusHtml = statusHtml;
+		this.setConfig = setConfig;
+		this.tokenGenerator = tokenGenerator;
 		remask.setRepeats(false);
 
 		setLayout(new BorderLayout());
@@ -56,25 +69,37 @@ class PairingPanel extends PluginPanel
 		body.add(status);
 		body.add(gap());
 
+		// Sync Token: shown and editable only after Show
 		body.add(heading("Sync Token"));
+		fill(token);
 		token.setEditable(false);
-		token.setAlignmentX(LEFT_ALIGNMENT);
-		token.setMaximumSize(new Dimension(Integer.MAX_VALUE, token.getPreferredSize().height));
 		body.add(token);
-		JPanel tokenButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 4));
-		tokenButtons.setOpaque(false);
-		tokenButtons.setAlignmentX(LEFT_ALIGNMENT);
+		JButton saveToken = new JButton("Save");
+		saveToken.addActionListener(e -> saveToken());
+		token.addActionListener(e -> saveToken());
 		showHide.addActionListener(e -> setTokenVisible(!tokenVisible));
 		JButton copyToken = new JButton("Copy");
 		copyToken.addActionListener(e -> copy(config.syncToken()));
-		tokenButtons.add(showHide);
-		tokenButtons.add(copyToken);
-		body.add(tokenButtons);
+		JButton newToken = new JButton("New");
+		newToken.addActionListener(e -> makeNewToken());
+		body.add(buttons(showHide, saveToken, copyToken, newToken));
+		tokenNote.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		tokenNote.setAlignmentX(LEFT_ALIGNMENT);
+		body.add(tokenNote);
 		body.add(gap());
 
-		JLabel help = new JLabel("<html>To pair: type the Sync Token into the Pssst app, then type the address the app "
-			+ "shows into <i>Phone Address</i> in this plugin's settings. Your phone must be on the same Wi-Fi, or on "
-			+ "Tailscale.</html>");
+		// Phone Address
+		body.add(heading("Phone Address"));
+		fill(address);
+		address.addActionListener(e -> saveAddress());
+		body.add(address);
+		JButton saveAddress = new JButton("Save");
+		saveAddress.addActionListener(e -> saveAddress());
+		body.add(buttons(saveAddress));
+		body.add(gap());
+
+		JLabel help = new JLabel("<html>To pair: type the Sync Token into the Pssst app, and type the address the app "
+			+ "shows into Phone Address here. Your phone must be on the same Wi-Fi, or on Tailscale.</html>");
 		help.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		help.setAlignmentX(LEFT_ALIGNMENT);
 		body.add(help);
@@ -84,13 +109,20 @@ class PairingPanel extends PluginPanel
 		refresh();
 	}
 
-	/** Re-reads the status and the token; safe to call from any thread. */
+	/** Re-reads the status, token and address; safe to call from any thread. Never overwrites a field being edited. */
 	void refresh()
 	{
 		SwingUtilities.invokeLater(() ->
 		{
 			status.setText(statusHtml.get());
-			renderToken();
+			if (!token.isFocusOwner())
+			{
+				renderToken();
+			}
+			if (!address.isFocusOwner())
+			{
+				address.setText(config.phoneAddress());
+			}
 		});
 	}
 
@@ -100,27 +132,47 @@ class PairingPanel extends PluginPanel
 		ticker.stop();
 	}
 
+	private void saveToken()
+	{
+		if (!tokenVisible)
+		{
+			return;
+		}
+		String value = token.getText().trim();
+		if (value.isEmpty())
+		{
+			JOptionPane.showMessageDialog(this, "The Sync Token can't be empty. Use New to make one.");
+			return;
+		}
+		setConfig.accept("syncToken", value);
+		setTokenVisible(false);
+	}
+
+	private void makeNewToken()
+	{
+		int answer = JOptionPane.showConfirmDialog(this,
+			"Make a new Sync Token? Your phone stops receiving until you type the new one into the Pssst app.",
+			"New Sync Token", JOptionPane.OK_CANCEL_OPTION);
+		if (answer == JOptionPane.OK_OPTION)
+		{
+			setConfig.accept("syncToken", tokenGenerator.get());
+			setTokenVisible(true);
+		}
+	}
+
+	private void saveAddress()
+	{
+		setConfig.accept("phoneAddress", address.getText().trim());
+		refresh();
+	}
+
 	/** What the player needs to know about sending to the phone right now, in plain words. */
 	static String describe(boolean enableSync, boolean sendToPhone, String addressProblem, DeliveryPolicy.State state,
 		boolean hasData, long lastDeliveredAt, long now)
 	{
-		return describe(enableSync, MIN_TOKEN_LENGTH, sendToPhone, addressProblem, state, hasData, lastDeliveredAt, now);
-	}
-
-	/** Shortest Sync Token accepted as safe (the plugin generates 32 characters; the Worker requires 16). */
-	static final int MIN_TOKEN_LENGTH = 16;
-
-	static String describe(boolean enableSync, int tokenLength, boolean sendToPhone, String addressProblem,
-		DeliveryPolicy.State state, boolean hasData, long lastDeliveredAt, long now)
-	{
 		if (!enableSync)
 		{
 			return html("Sync is off.", "Turn on <i>Enable Sync</i> in the Pssst Companion settings.");
-		}
-		if (tokenLength < MIN_TOKEN_LENGTH)
-		{
-			return html("The Sync Token is too short.", "Anyone on your network could guess it. Clear the "
-				+ "<i>Sync Token</i> field and turn the plugin off and on to get a new one, then copy it into the app.");
 		}
 		if (!sendToPhone)
 		{
@@ -139,7 +191,7 @@ class PairingPanel extends PluginPanel
 				return html("Waiting for your phone.", "The Pssst app isn't listening right now (closed, or not on the "
 					+ "same Wi-Fi). It will get the latest as soon as it is." + last);
 			case REJECTED:
-				return html("Your phone refused the Sync Token.", "Copy the Sync Token below into the Pssst app again.");
+				return html("Your phone refused the Sync Token.", "Type the Sync Token below into the Pssst app again.");
 			case PAUSED:
 				return html("Sending is paused for a moment.", "The app asked to wait. Nothing to do." + last);
 			default:
@@ -147,6 +199,15 @@ class PairingPanel extends PluginPanel
 					? html("Sending to your phone…", "Open the Pssst app on your phone if it doesn't arrive.")
 					: html("Nothing to send yet.", "Log in once and Pssst will send your data.");
 		}
+	}
+
+	/** A gentle note under a short, hand-typed token; null when the token is fine. */
+	static String tokenNote(String token)
+	{
+		int length = token == null ? 0 : token.trim().length();
+		return length > 0 && length < MIN_TOKEN_LENGTH
+			? "<html>Short tokens are easy to guess. 16+ characters, or use New.</html>"
+			: null;
 	}
 
 	static String ago(long ms)
@@ -187,9 +248,11 @@ class PairingPanel extends PluginPanel
 	{
 		String value = config.syncToken();
 		boolean hasToken = value != null && !value.isEmpty();
-		token.setText(!hasToken ? "(not created yet)" : tokenVisible ? value : "••••••••••••");
+		token.setEditable(tokenVisible);
+		token.setText(!hasToken ? "" : tokenVisible ? value : MASK);
 		showHide.setText(tokenVisible ? "Hide" : "Show");
-		showHide.setEnabled(hasToken);
+		String note = tokenNote(value);
+		tokenNote.setText(note == null ? "" : note);
 	}
 
 	private static void copy(String text)
@@ -198,6 +261,24 @@ class PairingPanel extends PluginPanel
 		{
 			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
 		}
+	}
+
+	private static void fill(JTextField field)
+	{
+		field.setAlignmentX(LEFT_ALIGNMENT);
+		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
+	}
+
+	private static JPanel buttons(JButton... buttons)
+	{
+		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 4));
+		row.setOpaque(false);
+		row.setAlignmentX(LEFT_ALIGNMENT);
+		for (JButton button : buttons)
+		{
+			row.add(button);
+		}
+		return row;
 	}
 
 	private static JLabel heading(String text)

@@ -79,7 +79,6 @@ public class CompanionPlugin extends Plugin
 	private static final int DEBOUNCE_DELAY_SECONDS = 2;
 	private static final int DELIVERY_TICK_SECONDS = 5;
 	private static final String TARGET_PHONE = "phone";
-	private static final String TARGET_SERVER = "server";
 	private static final int HEARTBEAT_TICKS = 1500; // 15 minutes = 1500 ticks @ 600ms/tick
 
 	// Potion storage: the same named enums, scripts and widget RuneLite's PotionStorage reads, not bare numbers
@@ -199,14 +198,13 @@ public class CompanionPlugin extends Plugin
 	private volatile String profileKey;
 	// The previous session's snapshot, loaded off-thread at startup; consumed once the profile is known
 	private volatile SnapshotStore.Snapshot persisted;
-	// What gets delivered: the live state once logged in, the saved snapshot before that. Profile of whoever produced it.
+	// What gets delivered to the phone: the live state once logged in, the saved snapshot before that.
 	private volatile StateDTO latestState;
 	private volatile String latestProfileKey;
 	// Why the Phone Address cannot be used, or null
 	private volatile String phoneAddressProblem;
 
 	private final DeliveryPolicy phonePolicy = new DeliveryPolicy(System::currentTimeMillis);
-	private final DeliveryPolicy serverPolicy = new DeliveryPolicy(System::currentTimeMillis);
 	private ScheduledFuture<?> deliveryTask;
 
 	private SnapshotStore snapshotStore;
@@ -220,6 +218,19 @@ public class CompanionPlugin extends Plugin
 	private ScheduledFuture<?> debounceTask;
 	private int tickCounter = 0;
 
+	/** 128 bits from SecureRandom, as hex. The token is the only credential between PC and phone; never logged. */
+	static String newToken()
+	{
+		byte[] bytes = new byte[16];
+		new SecureRandom().nextBytes(bytes);
+		StringBuilder token = new StringBuilder();
+		for (byte b : bytes)
+		{
+			token.append(String.format("%02x", b));
+		}
+		return token.toString();
+	}
+
 	@Provides
 	CompanionConfig provideConfig(ConfigManager configManager)
 	{
@@ -231,16 +242,7 @@ public class CompanionPlugin extends Plugin
 	{
 		if (config != null && (config.syncToken() == null || config.syncToken().trim().isEmpty()))
 		{
-			// 128 bits from SecureRandom. The token is the only credential protecting the state (and the Worker row), so
-			// it is long, and deliberately never logged.
-			byte[] bytes = new byte[16];
-			new SecureRandom().nextBytes(bytes);
-			StringBuilder token = new StringBuilder();
-			for (byte b : bytes)
-			{
-				token.append(String.format("%02x", b));
-			}
-			configManager.setConfiguration("pssstcompanion", "syncToken", token.toString());
+			configManager.setConfiguration(CONFIG_GROUP, "syncToken", newToken());
 			log.info("Generated a new sync token (shown in the plugin settings)");
 		}
 
@@ -280,7 +282,8 @@ public class CompanionPlugin extends Plugin
 		// Cheap check every few seconds; DeliveryPolicy decides whether anything is actually sent
 		deliveryTask = executor.scheduleWithFixedDelay(this::deliveryTick, DELIVERY_TICK_SECONDS, DELIVERY_TICK_SECONDS, TimeUnit.SECONDS);
 
-		pairingPanel = new PairingPanel(config, this::phoneStatusHtml);
+		pairingPanel = new PairingPanel(config, this::phoneStatusHtml,
+			(key, value) -> configManager.setConfiguration(CONFIG_GROUP, key, value), CompanionPlugin::newToken);
 		navigationButton = NavigationButton.builder()
 			.tooltip("Pssst Companion")
 			.icon(panelIcon())
@@ -360,7 +363,6 @@ public class CompanionPlugin extends Plugin
 		{
 			// Logged out: send the final state now instead of waiting for the 2-minute pacing
 			phonePolicy.requestFlush();
-			serverPolicy.requestFlush();
 			executor.schedule(this::deliveryTick, DEBOUNCE_DELAY_SECONDS + 1, TimeUnit.SECONDS);
 		}
 	}
@@ -397,7 +399,6 @@ public class CompanionPlugin extends Plugin
 		latestProfileKey = snapshot.getProfileKey();
 		event.waitFor(executor.submit(() -> snapshotStore.write(withMarks(snapshot))));
 		phonePolicy.requestFlush();
-		serverPolicy.requestFlush();
 		for (CompletableFuture<Void> sent : deliverAll())
 		{
 			event.waitFor(sent);
@@ -575,10 +576,6 @@ public class CompanionPlugin extends Plugin
 			{
 				phonePolicy.reset();
 			}
-			if ("syncToken".equals(key) || "enableByosPush".equals(key) || "serverUrl".equals(key) || "includeBank".equals(key))
-			{
-				serverPolicy.reset();
-			}
 			if (pairingPanel != null)
 			{
 				pairingPanel.refresh();
@@ -595,7 +592,7 @@ public class CompanionPlugin extends Plugin
 					executor.execute(snapshotStore::delete);
 				}
 			}
-			else if ("sendToPhone".equals(event.getKey()) || "enableByosPush".equals(event.getKey()))
+			else if ("sendToPhone".equals(event.getKey()))
 			{
 				triggerDebouncedSync();
 			}
@@ -1068,7 +1065,6 @@ public class CompanionPlugin extends Plugin
 		}
 		persisted = snapshot;
 		phonePolicy.restoreDelivered(snapshot.deliveredTo(TARGET_PHONE));
-		serverPolicy.restoreDelivered(snapshot.deliveredTo(TARGET_SERVER));
 		if (!liveThisSession)
 		{
 			latestState = snapshot.getData();
@@ -1076,7 +1072,7 @@ public class CompanionPlugin extends Plugin
 		}
 	}
 
-	/** Executor thread, every few seconds: hands the latest state to each enabled target its policy says is due. */
+	/** Executor thread, every few seconds: hands the latest state to the phone when its policy says it is due. */
 	private void deliveryTick()
 	{
 		try
@@ -1116,14 +1112,6 @@ public class CompanionPlugin extends Plugin
 				deliver(phonePolicy, address.url, token, state, sends);
 			}
 		}
-		if (config.enableByosPush())
-		{
-			HttpUrl url = NetworkDispatcher.normalizeServerUrl(config.serverUrl());
-			if (url != null)
-			{
-				deliver(serverPolicy, url, token, state, sends);
-			}
-		}
 		return sends;
 	}
 
@@ -1160,7 +1148,6 @@ public class CompanionPlugin extends Plugin
 	{
 		Map<String, Long> marks = new HashMap<>();
 		marks.put(TARGET_PHONE, phonePolicy.deliveredObservedAt());
-		marks.put(TARGET_SERVER, serverPolicy.deliveredObservedAt());
 		snapshot.setDelivered(marks);
 		return snapshot;
 	}
@@ -1178,8 +1165,7 @@ public class CompanionPlugin extends Plugin
 
 	private String phoneStatusHtml()
 	{
-		String token = config.syncToken();
-		return PairingPanel.describe(config.enableSync(), token == null ? 0 : token.trim().length(), config.sendToPhone(),
+		return PairingPanel.describe(config.enableSync(), config.sendToPhone(),
 			config.sendToPhone() ? PhoneAddress.parse(config.phoneAddress()).problem : null,
 			phonePolicy.state(), latestState != null, phonePolicy.lastDeliveredAt(), System.currentTimeMillis());
 	}

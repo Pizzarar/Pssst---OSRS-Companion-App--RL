@@ -24,11 +24,12 @@ public class PairingPanelTest
 	}
 
 	@Test
-	public void aShortHandTypedTokenIsFlagged()
+	public void aShortHandTypedTokenGetsAGentleNote()
 	{
-		String text = PairingPanel.describe(true, 3, true, null, DeliveryPolicy.State.DELIVERED, true, 0, NOW);
-		Assert.assertTrue(text, text.contains("too short"));
-		Assert.assertFalse(PairingPanel.describe(true, 32, true, null, DeliveryPolicy.State.DELIVERED, true, 0, NOW).contains("too short"));
+		Assert.assertNotNull(PairingPanel.tokenNote("mom"));
+		Assert.assertNull("your own longer token is fine", PairingPanel.tokenNote("my-own-sync-token-123"));
+		Assert.assertNull(PairingPanel.tokenNote(CompanionPlugin.newToken()));
+		Assert.assertEquals(32, CompanionPlugin.newToken().length());
 	}
 
 	@Test

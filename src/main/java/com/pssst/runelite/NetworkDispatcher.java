@@ -16,7 +16,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 /**
- * Sends the snapshot to a target the player owns: the Pssst app on their phone, or their own server. Outbound only,
+ * Sends the snapshot to the Pssst app on the player's phone. Outbound only,
  * asynchronous ({@code enqueue}) on RuneLite's injected client. The plugin never listens on a port. Whether and when to
  * send is {@link DeliveryPolicy}'s decision; this class only performs one POST and reports how it went.
  */
@@ -140,48 +140,5 @@ public class NetworkDispatcher
 			}
 		}
 		return Math.max(1, Math.min(seconds, MAX_BACKOFF_SECONDS)) * 1000;
-	}
-
-	/**
-	 * Normalizes a server address the player typed into an HTTP/HTTPS endpoint: accepts bare IPs (e.g. 100.64.0.1:8787),
-	 * strips trailing slashes, and appends /sync if not already present.
-	 */
-	public static HttpUrl normalizeServerUrl(String serverUrl)
-	{
-		if (serverUrl == null)
-		{
-			return null;
-		}
-
-		String trimmed = serverUrl.trim();
-		if (trimmed.isEmpty())
-		{
-			return null;
-		}
-
-		if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://"))
-		{
-			trimmed = "http://" + trimmed;
-		}
-
-		while (trimmed.endsWith("/"))
-		{
-			trimmed = trimmed.substring(0, trimmed.length() - 1);
-		}
-
-		HttpUrl parsed = HttpUrl.parse(trimmed);
-		if (parsed == null)
-		{
-			return null;
-		}
-
-		if ("0.0.0.0".equals(parsed.host()))
-		{
-			parsed = parsed.newBuilder().host("127.0.0.1").build();
-		}
-
-		return parsed.encodedPath().endsWith("/sync")
-			? parsed
-			: parsed.newBuilder().addPathSegment("sync").build();
 	}
 }

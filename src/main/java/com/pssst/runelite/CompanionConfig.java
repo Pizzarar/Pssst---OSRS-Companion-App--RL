@@ -10,8 +10,8 @@ public interface CompanionConfig extends Config
 {
 	String IP_WARNING = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers.";
 
-	/** Settings removed when the plugin stopped serving data itself (it now only sends); unset once on start-up. */
-	String[] RETIRED_KEYS = {"enableLocalServer", "localServerPort", "bindLoopbackOnly"};
+	/** Settings from older versions (the Local Server, and sending to your own server); unset once on start-up. */
+	String[] RETIRED_KEYS = {"enableLocalServer", "localServerPort", "bindLoopbackOnly", "enableByosPush", "serverUrl"};
 
 	@ConfigSection(
 		name = "Master Sync",
@@ -26,14 +26,6 @@ public interface CompanionConfig extends Config
 		position = 10
 	)
 	String phoneSection = "phoneSection";
-
-	@ConfigSection(
-		name = "Advanced: Your Own Server",
-		description = "Optional. Send your data to a server you run yourself, such as your own Pssst Worker. Most players do not need this.",
-		position = 20,
-		closedByDefault = true
-	)
-	String byosSection = "byosSection";
 
 	// --- Master Sync ---
 
@@ -100,33 +92,5 @@ public interface CompanionConfig extends Config
 	default boolean includeBank()
 	{
 		return true;
-	}
-
-	// --- Your own server (advanced) ---
-
-	@ConfigItem(
-		keyName = "enableByosPush",
-		name = "Send to My Server",
-		description = "Also sends your data to the Server URL below when it changes.",
-		warning = IP_WARNING,
-		position = 21,
-		section = byosSection
-	)
-	default boolean enableByosPush()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "serverUrl",
-		name = "Server URL",
-		description = "Address of your own Pssst Worker, for example https://pssst-worker.yourname.workers.dev.",
-		position = 22,
-		section = byosSection
-	)
-	default String serverUrl()
-	{
-		// Empty on purpose: there is no server to assume
-		return "";
 	}
 }

@@ -112,9 +112,6 @@ public class CompanionPluginComplianceTest
 			configItemAnno.warning().toLowerCase().contains("ip address"));
 
 		// The push item is where data actually leaves the machine, so it carries the disclosure too
-		ConfigItem pushItem = CompanionConfig.class.getMethod("enableByosPush").getAnnotation(ConfigItem.class);
-		Assert.assertTrue("enableByosPush must warn about IP address submission",
-			pushItem.warning().toLowerCase().contains("ip address"));
 		ConfigItem phoneItem = CompanionConfig.class.getMethod("sendToPhone").getAnnotation(ConfigItem.class);
 		Assert.assertTrue("sendToPhone must warn about IP address submission", phoneItem.warning().toLowerCase().contains("ip address"));
 		ConfigItem bankItem = CompanionConfig.class.getMethod("includeBank").getAnnotation(ConfigItem.class);
@@ -141,14 +138,6 @@ public class CompanionPluginComplianceTest
 		Assert.assertFalse("Sending to the phone must be opt-in (default false)", config.sendToPhone());
 		Assert.assertEquals("no phone is assumed", "", config.phoneAddress());
 		Assert.assertTrue("the bank goes along once sending is on (its own toggle)", config.includeBank());
-		Assert.assertFalse("Pushing to a configured server must be opt-in (default false)", config.enableByosPush());
-		Assert.assertEquals("no server is assumed: the Server URL starts empty", "", config.serverUrl());
-
-		// The optional outbound server stays out of the way: its section starts collapsed
-		java.lang.reflect.Field byosField = CompanionConfig.class.getField("byosSection");
-		net.runelite.client.config.ConfigSection byos = byosField.getAnnotation(net.runelite.client.config.ConfigSection.class);
-		Assert.assertTrue("Advanced: Your Own Server starts collapsed", byos.closedByDefault());
-		Assert.assertEquals("Advanced: Your Own Server", byos.name());
 	}
 
 	private static boolean hasConfigKey(String key)
@@ -174,34 +163,6 @@ public class CompanionPluginComplianceTest
 		Assert.assertEquals(1_699_999_000_000L, obj.get("bankObservedAt").getAsLong());
 		Assert.assertTrue(obj.get("observedAt").getAsJsonPrimitive().isNumber());
 		Assert.assertFalse("updated_at belongs to the envelope, not the snapshot", obj.has("updated_at"));
-	}
-
-	@Test
-	public void testNetworkDispatcherUrlNormalization()
-	{
-		// Bare IP, e.g. a Tailscale or other VPN address
-		HttpUrl vpnAddress = NetworkDispatcher.normalizeServerUrl("100.64.0.1:8787");
-		Assert.assertNotNull(vpnAddress);
-		Assert.assertEquals("http://100.64.0.1:8787/sync", vpnAddress.toString());
-
-		// Trailing slash stripping & /sync appending
-		HttpUrl localWithSlash = NetworkDispatcher.normalizeServerUrl("http://127.0.0.1:8787/");
-		Assert.assertNotNull(localWithSlash);
-		Assert.assertEquals("http://127.0.0.1:8787/sync", localWithSlash.toString());
-
-		// 0.0.0.0 rewrite to 127.0.0.1
-		HttpUrl zeroAddr = NetworkDispatcher.normalizeServerUrl("http://0.0.0.0:8787");
-		Assert.assertNotNull(zeroAddr);
-		Assert.assertEquals("http://127.0.0.1:8787/sync", zeroAddr.toString());
-
-		// Already contains /sync
-		HttpUrl alreadySync = NetworkDispatcher.normalizeServerUrl("https://my-server.com/sync");
-		Assert.assertNotNull(alreadySync);
-		Assert.assertEquals("https://my-server.com/sync", alreadySync.toString());
-
-		// Blank / null
-		Assert.assertNull(NetworkDispatcher.normalizeServerUrl(""));
-		Assert.assertNull(NetworkDispatcher.normalizeServerUrl(null));
 	}
 
 	private static class MethodHandlesLookupHelper
