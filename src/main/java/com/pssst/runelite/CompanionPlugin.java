@@ -218,6 +218,7 @@ public class CompanionPlugin extends Plugin
 	private NavigationButton navigationButton;
 
 	private PriceBook priceBook;
+	private ObservationStore observationStore;
 	private FarmingTracker farmingTracker;
 	private BirdhouseTracker birdhouseTracker;
 
@@ -306,7 +307,7 @@ public class CompanionPlugin extends Plugin
 			}
 		});
 
-		ObservationStore observationStore = new ObservationStore()
+		observationStore = new ObservationStore()
 		{
 			@Override
 			public String profileKey()
@@ -513,6 +514,7 @@ public class CompanionPlugin extends Plugin
 		{
 			refreshQuests();
 		}
+		refreshSlayer();
 		publishState();
 	}
 
@@ -609,6 +611,12 @@ public class CompanionPlugin extends Plugin
 			updatePotionStorage();
 			publishState();
 		}
+		else if (scriptId == 328 || scriptId == 422)
+		{
+			// [clientscript,slayer_rewards_tasks_init] (328) / [proc,slayer_rewards_tasks_currenttask] (422)
+			refreshSlayer();
+			publishState();
+		}
 	}
 
 	@Subscribe
@@ -677,10 +685,6 @@ public class CompanionPlugin extends Plugin
 					// Sync off means nothing about the player stays on disk for the app
 					executor.execute(snapshotStore::delete);
 				}
-			}
-			else if ("sendToPhone".equals(event.getKey()))
-			{
-				triggerDebouncedSync();
 			}
 		}
 	}
@@ -1076,7 +1080,14 @@ public class CompanionPlugin extends Plugin
 			{
 				return client.getDBTableField(row, column, 0)[0];
 			}
-		});
+
+			@Override
+			public boolean isTaskStorageInterfaceOpen()
+			{
+				Widget w = client.getWidget(InterfaceID.SlayerRewards.TASKS);
+				return w != null && !w.isHidden();
+			}
+		}, observationStore);
 		if (entry != null)
 		{
 			currentSlayer = entry;

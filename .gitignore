@@ -17,3 +17,5 @@ out/
 # Local tooling (contains machine-specific paths)
 .agents/
 .run/
+.claude/
+

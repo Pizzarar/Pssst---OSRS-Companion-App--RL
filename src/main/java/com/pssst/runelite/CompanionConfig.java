@@ -45,7 +45,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "syncToken",
 		name = "Sync Token",
-		description = "The password between this PC and your phone. Copy it into the Pssst app, and keep it private.",
+		description = "The pairing code between this PC and your phone. Type it into the Pssst app.",
 		position = 2,
 		section = syncSection
 	)

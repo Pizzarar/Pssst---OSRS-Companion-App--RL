@@ -31,8 +31,6 @@ class PairingPanel extends PluginPanel
 	private static final int STATUS_REFRESH_MS = 30_000;
 	private static final String MASK = "••••••••••••";
 
-	/** Shortest Sync Token that isn't easy to guess (the plugin generates 32 characters). */
-	static final int MIN_TOKEN_LENGTH = 16;
 
 	private final CompanionConfig config;
 	private final Supplier<String> statusHtml;
@@ -42,7 +40,6 @@ class PairingPanel extends PluginPanel
 
 	private final JLabel status = new JLabel();
 	private final JTextField token = new JTextField();
-	private final JLabel tokenNote = new JLabel();
 	private final JButton showHide = new JButton("Show");
 	private final JTextField address = new JTextField();
 	private final Timer remask = new Timer(TOKEN_VISIBLE_MS, e -> setTokenVisible(false));
@@ -91,9 +88,6 @@ class PairingPanel extends PluginPanel
 		JButton newToken = new JButton("New");
 		newToken.addActionListener(e -> makeNewToken());
 		body.add(buttons(showHide, saveToken, copyToken, newToken));
-		tokenNote.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-		tokenNote.setAlignmentX(LEFT_ALIGNMENT);
-		body.add(tokenNote);
 		body.add(gap());
 
 		// Phone Address
@@ -240,6 +234,7 @@ class PairingPanel extends PluginPanel
 		return null;
 	}
 
+
 	static String ago(long ms)
 	{
 		long minutes = Math.max(0, ms / 60_000L);
@@ -281,8 +276,6 @@ class PairingPanel extends PluginPanel
 		token.setEditable(tokenVisible);
 		token.setText(!hasToken ? "" : tokenVisible ? value : MASK);
 		showHide.setText(tokenVisible ? "Hide" : "Show");
-		String note = tokenNote(value);
-		tokenNote.setText(note == null ? "" : note);
 	}
 
 	private static void copy(String text)

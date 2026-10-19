@@ -78,6 +78,11 @@ public class StateDTO
 		private int initialAmount;
 		private int points;
 		private int streak;
+		private int itemId;
+		private boolean storageUnlocked;
+		private String storedTaskName;
+		private int storedAmount;
+		private int storedItemId;
 	}
 
 	/** Last observation of each farming patch the player has stood next to; see FarmingTracker. */
