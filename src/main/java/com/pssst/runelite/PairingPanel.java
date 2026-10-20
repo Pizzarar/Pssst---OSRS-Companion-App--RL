@@ -228,7 +228,7 @@ class PairingPanel extends PluginPanel
 		}
 	}
 
-	/** Any non-empty Sync Token is valid over private LAN / Tailscale; null when fine. */
+	/** Any non-empty Sync Token is valid over the local network; null when fine. */
 	static String tokenNote(String token)
 	{
 		return null;

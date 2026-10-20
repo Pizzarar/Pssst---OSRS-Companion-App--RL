@@ -1243,7 +1243,7 @@ public class CompanionPlugin extends Plugin
 		{
 			return;
 		}
-		// A name (Tailscale MagicDNS, a router name) is looked up here, on the executor, every time it is used
+		// A hostname (such as a router name) is looked up here, on the executor, every time it is used
 		PhoneAddress.Target target = PhoneAddress.target(address, InetAddress::getAllByName);
 		phoneAddressProblem = target.problem;
 		if (target.url == null)

@@ -6,7 +6,7 @@ A guide to connecting the **Pssst Companion** RuneLite plugin with the **Pssst**
 
 - RuneLite installed on your PC.
 - Pssst Android app installed on your Android device.
-- Both devices connected to the same local network (home Wi-Fi) or the same VPN (e.g. Tailscale).
+- Both devices connected to the same local network (home Wi-Fi).
 
 ---
 
@@ -24,7 +24,7 @@ A guide to connecting the **Pssst Companion** RuneLite plugin with the **Pssst**
 
 1. Open the Pssst app on your phone.
 2. Enter your **Sync Token** in the setup screen.
-3. Check the **Phone Address** displayed on the app's setup/status screen (for example, `192.168.1.50:8789` or your Tailscale IP).
+3. Check the **Phone Address** displayed on the app's setup/status screen (for example, `192.168.1.50`).
 
 ---
 
@@ -57,7 +57,7 @@ A guide to connecting the **Pssst Companion** RuneLite plugin with the **Pssst**
 ## Troubleshooting
 
 - **Phone shows "Disconnected" or "Waiting for data":**
-  - Verify that both devices are on the same Wi-Fi subnet, or that Tailscale is connected on both.
+  - Verify that both devices are on the same Wi-Fi subnet.
   - Verify the Phone Address in RuneLite matches the IP and port shown in the Pssst app.
   - Ensure local network access is not blocked by Windows Defender Firewall or router client isolation.
 - **Bank data not showing:**

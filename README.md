@@ -6,9 +6,9 @@ Check your bank, GE offers and skills from the couch. Get a ping when your herbs
 
 <table>
   <tr>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App/main/docs/images/overview.png" width="260" alt="Overview screen"></td>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App/main/docs/images/timers-dailies.png" width="260" alt="Timers screen, Dailies tab"></td>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App/main/docs/images/progress.png" width="260" alt="Progress screen, Skills tab"></td>
+    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/overview.png" width="260" alt="Overview screen"></td>
+    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/timers-dailies.png" width="260" alt="Timers screen, Dailies tab"></td>
+    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/progress.png" width="260" alt="Progress screen, Skills tab"></td>
   </tr>
 </table>
 
@@ -26,8 +26,8 @@ Check your bank, GE offers and skills from the couch. Get a ping when your herbs
 
 <table>
   <tr>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App/main/docs/images/storage.png" width="260" alt="Storage screen, Bank tab"></td>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App/main/docs/images/exchange.png" width="260" alt="Exchange screen"></td>
+    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/storage.png" width="260" alt="Storage screen, Bank tab"></td>
+    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/exchange.png" width="260" alt="Exchange screen"></td>
   </tr>
 </table>
 
@@ -49,12 +49,12 @@ Farming and birdhouse times follow RuneLite's own Time Tracking logic, so they c
 
 ## How it works
 
-<img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App/main/docs/images/how-it-works.png" width="800" alt="The plugin on your PC sends a snapshot to the Pssst app on your phone over your home Wi-Fi or Tailscale. Nothing goes to a Pssst server.">
+<img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/how-it-works.png" width="800" alt="The plugin on your PC sends a snapshot to the Pssst app on your phone over your home Wi-Fi. Nothing goes to a Pssst server.">
 
 - The plugin **only sends**. It never opens a port on your PC.
 - It sends when something changes, at most every 2 minutes while you play, plus once when you log out. If your phone can't be reached, it tries again every 30 seconds until the snapshot lands.
 - The app listens while it's open, and for about a minute each time Android runs its background check (roughly every 15 minutes).
-- The app only accepts snapshots from devices on your own network that know your sync token. It makes no outbound requests of its own.
+- The app only accepts snapshots from devices on your own network that know your sync token. It makes no outbound requests of its own. (Private mesh networks like Tailscale or NordVPN Meshnet can also be used for real-time updates away from your PC.)
 - Prices come from RuneLite's own price data inside the snapshot. Item icons are bundled with the app; any that are missing are drawn by your RuneLite and sent once.
 - The plugin keeps the last snapshot in RuneLite's folder (`last-snapshot.json`, never containing your token), so anything unsent goes out next time. Turning off **Enable Sync** deletes it.
 
@@ -62,7 +62,7 @@ Farming and birdhouse times follow RuneLite's own Time Tracking logic, so they c
 
 ## Setup
 
-You need RuneLite on your PC and the Pssst app on an Android phone (Android 7.0 or newer), both on the same home Wi-Fi or the same Tailscale network.
+You need RuneLite on your PC and the Pssst app on an Android phone (Android 7.0 or newer), both on the same home Wi-Fi.
 
 1. **Install both.** Pssst Companion from RuneLite's Plugin Hub, and the app from the [latest release](https://github.com/Pizzarar/Pssst---OSRS-Companion-App--Android/releases/latest).
 2. **Turn on Enable Sync** in the plugin's settings. Copy the **Sync Token** (also shown in the Pssst side panel), like `goblin-whip`.
@@ -72,14 +72,11 @@ You need RuneLite on your PC and the Pssst app on an Android phone (Android 7.0 
 
 ### Keeping the address stable
 
-Phones can get a new Wi-Fi address now and then. If that happens, the app shows a banner with the new one. To stop it changing:
-
-- **Tailscale (easiest):** install it on your PC and phone. The phone gets a `100.x` address that never changes, and it works away from home too. You can also type the phone's Tailscale name into Phone Address.
-- **Router reservation:** reserve your phone's address in your router's settings.
+Phones can get a new Wi-Fi address now and then. If that happens, the app shows a banner with the new one. You can reserve your phone's address in your router's settings (DHCP reservation) or set a fixed IP in your phone's Wi-Fi settings to stop it changing.
 
 ### Troubleshooting
 
-- **App says it's waiting for data:** check both devices are on the same Wi-Fi (or both on Tailscale), and that Phone Address matches what the app shows.
+- **App says it's waiting for data:** check both devices are on the same Wi-Fi, and that Phone Address matches what the app shows.
 - **Still nothing:** Windows Firewall or your router's "client isolation" / guest network can block devices from talking to each other.
 - **Bank is empty:** turn on **Include Bank**, then open your bank in-game once so RuneLite can see it.
 - **Side panel says the phone is unreachable:** the address probably changed; see above.
@@ -108,7 +105,7 @@ Pssst is built to follow RuneLite's [Plugin Hub rules](https://github.com/runeli
 
 - **No server in the plugin.** RuneLite [doesn't accept](https://github.com/runelite/runelite/wiki/Rejected-or-Rolled-Back-Features) plugins that expose player information over HTTP. Pssst's plugin opens no port; it only sends to a phone you name.
 - **Opt-in, with warnings.** Nothing leaves your PC until you turn it on, and every sending option carries RuneLite's IP warning.
-- **Your devices only.** The phone address must be on your home network, Tailscale, or the PC itself.
+- **Your devices only.** The phone address must be on your local network or the PC itself.
 - **Not spammy.** At most one send every 2 minutes, and it backs off instead of hammering when it's told to slow down.
 - **Hands off the game.** No input, no clicks, no menu or interface changes. It only reads what the game already shows you.
 - **No boss helpers.** Alerts are for farming, birdhouses, dailies and Slayer completion, never combat mechanics.
@@ -128,7 +125,7 @@ I plan to keep it working as RuneLite and the game update, but above all I built
 
 ## Issues and requests
 
-Found a bug or have an idea? [Open an issue](https://github.com/Pizzarar/Pssst---OSRS-Companion-App/issues). Screenshots and the steps to reproduce it help a lot.
+Found a bug or have an idea? [Open an issue](https://github.com/Pizzarar/Pssst---OSRS-Companion-App--RL/issues). Screenshots and the steps to reproduce it help a lot.
 
 I'll get to things when I can and when I feel like it. No timelines, no promises. At the end of the day I'm doing this because I thought I could, and I wanted to give it a shot.
 

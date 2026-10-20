@@ -22,7 +22,7 @@ public interface CompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Phone",
-		description = "Send your data to the Pssst app on your phone, over your home Wi-Fi (or Tailscale)",
+		description = "Send your data to the Pssst app on your phone, over your home Wi-Fi",
 		position = 10
 	)
 	String phoneSection = "phoneSection";
@@ -72,7 +72,7 @@ public interface CompanionConfig extends Config
 	@ConfigItem(
 		keyName = "phoneAddress",
 		name = "Phone Address",
-		description = "The address the Pssst app shows, for example 192.168.1.42, or a name for your phone (a Tailscale name, or one your router gives it).",
+		description = "The address the Pssst app shows, for example 192.168.1.42, or the name your router gives your phone.",
 		position = 12,
 		section = phoneSection
 	)

@@ -66,14 +66,14 @@ public class PhoneAddressTest
 	@Test
 	public void aNameIsLookedUpAndSentToTheCheckedAddress()
 	{
-		PhoneAddress.Result parsed = PhoneAddress.parse("Pixel-8.tail1234.ts.net");
+		PhoneAddress.Result parsed = PhoneAddress.parse("Pixel-8.home.arpa");
 		Assert.assertNull(parsed.problem);
 		Assert.assertTrue(parsed.isName);
 		Assert.assertNull("a name has no URL until it is looked up", parsed.url());
 
 		PhoneAddress.Target target = PhoneAddress.target(parsed, host ->
 		{
-			Assert.assertEquals("pixel-8.tail1234.ts.net", host);
+			Assert.assertEquals("pixel-8.home.arpa", host);
 			return new java.net.InetAddress[]{ip("100.101.102.103")};
 		});
 		Assert.assertNull(target.problem);

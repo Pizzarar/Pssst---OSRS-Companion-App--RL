@@ -25,8 +25,8 @@ Mystix was a companion plugin removed from the RuneLite Plugin Hub. The details 
 
 ## No server is the model
 
-- The data path is plugin → the Pssst app on your phone, over your own network (home Wi-Fi or Tailscale). There is no Pssst server, central or self-hosted, and nothing for the player to host.
-- The sync token is a short two-word pairing code (32 x 32 words, `CompanionPlugin.newToken()`). That is deliberate: the app's receiver only accepts home-network and Tailscale peers, so the token only has to tell this player's RuneLite apart from other devices on their own network. Never describe it as a strong secret or a password.
+- The data path is plugin → the Pssst app on your phone, over your own network (home Wi-Fi). There is no Pssst server, central or self-hosted, and nothing for the player to host.
+- The sync token is a short two-word pairing code (32 x 32 words, `CompanionPlugin.newToken()`). That is deliberate: the app's receiver only accepts home-network and mesh VPN peers, so the token only has to tell this player's RuneLite apart from other devices on their own network. Never describe it as a strong secret or a password.
 
 ## Prices
 
@@ -39,7 +39,7 @@ Mystix was a companion plugin removed from the RuneLite Plugin Hub. The details 
 
 - Java 11 target. Use only the injected `OkHttpClient`, `Gson` and `ScheduledExecutorService`. Never `new OkHttpClient()`, `new Gson()`, `HttpClient`, `HttpURLConnection` or your own pools. Network calls use `enqueue`, never the client thread.
 - No reflection (test code excepted), dynamic code, subprocesses, or input injection.
-- **No listening socket in the plugin.** The Hub rejects "Plugins which expose player information over HTTP" (osrs-mcp was rejected in 2026). The plugin only sends, opt-in with the IP warning, to targets the player owns: the Pssst app on their phone (Phone Address limited to home-network, Tailscale or loopback addresses). Sends are paced (at most every 2 minutes while playing) and the bank has its own toggle, following approved plugins (osrs-bank-sync, ha-exporter, ironman-path-sync). `HubRulesTest` fails on `ServerSocket`/`HttpServer`.
+- **No listening socket in the plugin.** The Hub rejects "Plugins which expose player information over HTTP" (osrs-mcp was rejected in 2026). The plugin only sends, opt-in with the IP warning, to targets the player owns: the Pssst app on their phone (Phone Address limited to home-network, mesh VPN or loopback addresses). Sends are paced (at most every 2 minutes while playing) and the bank has its own toggle, following approved plugins (osrs-bank-sync, ha-exporter, ironman-path-sync). `HubRulesTest` fails on `ServerSocket`/`HttpServer`.
 - File I/O only through `net.runelite.client.util.Filepath` (the plugin's snapshot uses `getPluginDirectory()` with `internalName = "pssst-companion"`). No `java.io.File`, `Files` or `Paths`; `HubRulesTest` scans for them.
 - No `Thread.interrupt` or `Thread.sleep` (forbidden by the Hub); close the socket to stop the accept thread.
 - `gameval` ids only, with no deprecated `Varbits`/`VarPlayer`/`InventoryID`/`WidgetID`. No machine paths in the plugin repo.

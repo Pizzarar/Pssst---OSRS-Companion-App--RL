@@ -8,8 +8,8 @@ import okhttp3.HttpUrl;
 
 /**
  * Turns what the player typed into "Phone Address" into the URL the plugin sends to. It accepts the phone's numeric
- * address (192.168.1.42) or a name that resolves to it (a Tailscale MagicDNS name, or a name the home router hands
- * out). Either way it must end up on the player's own network (home ranges, Tailscale's 100.64.0.0/10, link-local, or
+ * address (192.168.1.42) or a name that resolves to it (such as a name the home router hands
+ * out). Either way it must end up on the player's own network (home ranges, 100.64.0.0/10, link-local, or
  * this PC for development), so the setting cannot point at a server on the internet.
  */
 final class PhoneAddress
@@ -108,7 +108,7 @@ final class PhoneAddress
 		{
 			return isOwnNetwork(octets)
 				? new Result(host, port, false, null)
-				: problem("That is not a home-network or Tailscale address. Use the address the Pssst app shows.");
+				: problem("That is not a home-network address. Use the address the Pssst app shows.");
 		}
 		if (looksLikeIpv4(host))
 		{
@@ -139,7 +139,7 @@ final class PhoneAddress
 		}
 		catch (UnknownHostException e)
 		{
-			return new Target(null, null); // not found right now (phone away, Tailscale off): retried like a closed app
+			return new Target(null, null); // not found right now (phone away): retried like a closed app
 		}
 		InetAddress chosen = null;
 		for (InetAddress address : found)
@@ -176,7 +176,7 @@ final class PhoneAddress
 		return false;
 	}
 
-	/** 10/8, 172.16/12, 192.168/16, 100.64/10 (Tailscale), 169.254/16 (link-local), 127/8 (this PC, for an emulator). */
+	/** 10/8, 172.16/12, 192.168/16, 100.64/10 (mesh VPN), 169.254/16 (link-local), 127/8 (this PC, for an emulator). */
 	static boolean isOwnNetwork(int[] o)
 	{
 		return o[0] == 10
@@ -197,7 +197,7 @@ final class PhoneAddress
 		return new Result(null, 0, false, text);
 	}
 
-	/** Letters, digits, hyphens and dots, like pixel-8, pixel-8.lan or pixel-8.tail1234.ts.net. */
+	/** Letters, digits, hyphens and dots, like pixel-8, pixel-8.lan or pixel-8.home.arpa. */
 	private static boolean isHostname(String host)
 	{
 		if (host.isEmpty() || host.length() > 253 || host.startsWith(".") || host.endsWith(".") || host.contains(".."))
