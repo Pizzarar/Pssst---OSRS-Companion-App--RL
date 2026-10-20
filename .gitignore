@@ -14,8 +14,10 @@ build/
 local.properties
 out/
 
-# Local tooling (contains machine-specific paths)
+# Local tooling & internal notes (contains machine-specific paths / dev notes)
 .agents/
 .run/
 .claude/
-
+CLAUDE.md
+GUIDELINES.md
+run-test.bat
