@@ -4,14 +4,6 @@
 
 Check your bank, GE offers and skills from the couch. Get a ping when your herbs are grown or your birdhouses are ready. No server, no account, nothing to host.
 
-<table>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/overview.png" width="260" alt="Overview screen"></td>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/timers-dailies.png" width="260" alt="Timers screen, Dailies tab"></td>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/progress.png" width="260" alt="Progress screen, Skills tab"></td>
-  </tr>
-</table>
-
 ---
 
 ## What it does
@@ -23,13 +15,6 @@ Check your bank, GE offers and skills from the couch. Get a ping when your herbs
 | **Exchange** | Your own Grand Exchange offers, all 8 slots |
 | **Progress** | Skills (level, XP to next level, combat level, total) and quests |
 | **Timers** | Dailies, Fossil Island birdhouses, farming patches (crop, stage, time left, diseased) and farmer payments |
-
-<table>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/storage.png" width="260" alt="Storage screen, Bank tab"></td>
-    <td><img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/exchange.png" width="260" alt="Exchange screen"></td>
-  </tr>
-</table>
 
 ### Notifications
 
@@ -48,8 +33,6 @@ Farming and birdhouse times follow RuneLite's own Time Tracking logic, so they c
 ---
 
 ## How it works
-
-<img src="https://raw.githubusercontent.com/Pizzarar/Pssst---OSRS-Companion-App--RL/main/docs/images/how-it-works.png" width="800" alt="The plugin on your PC sends a snapshot to the Pssst app on your phone over your home Wi-Fi. Nothing goes to a Pssst server.">
 
 - The plugin **only sends**. It never opens a port on your PC.
 - It sends when something changes, at most every 2 minutes while you play, plus once when you log out. If your phone can't be reached, it tries again every 30 seconds until the snapshot lands.
